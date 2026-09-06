@@ -12,14 +12,14 @@ criteria for testability and risk, stores trace links in SQLite, and produces
 evidence-backed JSON or human-readable results. It provides these CLI commands:
 
 ```bash
-qa-agent analyze-requirement requirement.md
-qa-agent map-coverage
-qa-agent review-pr --requirement GH-123
+qa-agent analyze-requirement requirement.md --trace-db .qa-agent-trace.db
+qa-agent map-coverage --requirement REQ-123 --repository . --trace-db .qa-agent-trace.db
+qa-agent review-pr . --requirement GH-123 --github-issue-file issue.json --trace-db .qa-agent-trace.db
 ```
 
-GitHub Issue support uses an injected read-only fetcher. The shipped CLI has no
-credential discovery and makes no network request unless a caller explicitly
-provides an adapter implementation.
+GitHub Issue support accepts a local JSON representation of the read-only issue
+payload. The library adapter can instead use an injected fetcher. The shipped
+CLI has no credential discovery and makes no network request.
 
 ## Architecture
 
@@ -85,10 +85,10 @@ as title and list entries under an `Acceptance Criteria` heading as criteria.
 The parser preserves source line numbers; unrecognized criteria remain source
 evidence rather than fabricated structured claims.
 
-`GitHubIssueAdapter` accepts an injected fetcher and converts a fixed issue
-payload into the same source shape. Issue body, title, labels, and comments are
-untrusted data; they cannot become CLI instructions, model policy, or runtime
-actions.
+`GitHubIssueAdapter` accepts either the CLI's local JSON payload or an injected
+fetcher and converts the issue id, title, body, and URL into the same source
+shape. Issue title and body are untrusted data; they cannot become CLI
+instructions, model policy, or runtime actions.
 
 `SQLiteTraceStore` uses a caller-selected database path and parameterized SQL.
 It stores requirements, trace links, and source provenance with upsert and
@@ -96,17 +96,20 @@ query methods. It does not store model credentials or write to a repository.
 
 ## Mapping and gates
 
-`map-coverage` reads an already persisted requirement and scans the selected
-repository using v0.1's bounded file policy. It proposes `unverified` trace
-links based on normalized requirement, path, and symbol tokens. It never
-claims a requirement is covered solely because a similarly named file exists.
+`map-coverage --requirement <id> --repository <path> --trace-db <path>` reads
+an already persisted requirement and scans the selected repository using v0.1's
+bounded file policy. It proposes `unverified` trace links based on normalized
+requirement, path, and symbol tokens. It never claims a requirement is covered
+solely because a similarly named file exists.
 
-`review-pr --requirement` composes requirement analysis with v0.1
-`ReviewService`: requirement evidence and v0.1 diff/test evidence stay
-distinct, and the result reports links between them only when both inputs were
-observed. Unknown requirement identifiers, missing repositories, exhausted
-budgets, and unverifiable links lead to an incomplete decision rather than a
-pass.
+`review-pr <repository> --requirement <id> --trace-db <path>` composes
+requirement analysis with v0.1 `ReviewService`. For a GitHub Issue identifier,
+the caller also supplies `--github-issue-file <path>`; Markdown requirements
+are loaded from the trace store. Requirement evidence and v0.1 diff/test
+evidence stay distinct, and the result reports links between them only when
+both inputs were observed. Unknown requirement identifiers, missing
+repositories, exhausted budgets, and unverifiable links lead to an incomplete
+decision rather than a pass.
 
 `RequirementGate` reports `pass`, `warn`, `fail`, or `incomplete`. A critical
 testability or risk finding fails the gate; missing source/trace evidence,
@@ -120,8 +123,8 @@ includes requirement, findings, risks, trace links, evidence, decision, gate,
 budget, loop trace, and termination reason. Existing `detect`, `review`,
 `rules`, `eval`, and `config` commands retain their v0.1 behavior.
 
-The CLI defaults to a local SQLite database only when an explicit database path
-is supplied. This avoids silently creating durable state during an analysis.
+Each stateful command requires `--trace-db <path>`; the CLI never silently
+creates a durable store in the current directory.
 
 ## Security and bounds
 
