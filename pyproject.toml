@@ -1,6 +1,6 @@
 [project]
 name = "ai-native-qa-agents"
-version = "0.0.0"
+version = "0.1.0"
 description = "Evidence-driven QA agent reference architecture"
 requires-python = ">=3.11"
 readme = "README.md"
