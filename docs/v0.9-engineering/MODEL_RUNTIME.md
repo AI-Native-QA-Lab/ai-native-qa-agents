@@ -1,0 +1,19 @@
+# v0.9 Model Runtime — Quality Knowledge Graph
+
+## Principle
+```text
+Task → Capability → Model
+```
+
+Semantic reasoning in this version supports the non-deterministic portions of `Quality Knowledge Graph`.
+
+Requirements:
+- provider-neutral ModelRequest/ModelResponse
+- structured output validation
+- capability checks
+- task-based routing as supported by current runtime version
+- usage/cost/latency metadata
+- explicit fallback metadata
+- model policy before data upload
+
+Model Runtime cannot mutate AgentState, bypass permissions, or terminate the Agent Loop.

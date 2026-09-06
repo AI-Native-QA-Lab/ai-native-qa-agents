@@ -1,0 +1,148 @@
+# Package Manifest
+
+## Root Documents
+- `AGENT_RUNTIME_SPEC.md`
+- `FULL_ENGINEERING_PLAN.md`
+- `MANIFEST.md`
+- `MASTER_IMPLEMENTATION_ROADMAP.md`
+- `MODEL_RUNTIME_SPEC.md`
+- `PROJECT_BLUEPRINT.md`
+- `PROJECT_REVIEW.md`
+- `README.md`
+- `ROADMAP_AND_VERSION_DESIGN.md`
+
+## Engineering Packs
+
+### `v0.1-engineering/`
+- `ADAPTER_SPEC.md`
+- `AGENT_LOOP.md`
+- `ARCHITECTURE.md`
+- `DOMAIN_MODEL.md`
+- `EVAL_SPEC.md`
+- `EVIDENCE_AND_GATES.md`
+- `EVIDENCE_SPEC.md`
+- `IMPLEMENTATION_PLAN.md`
+- `ISSUE_BACKLOG.md`
+- `MODEL_RUNTIME.md`
+- `README.md`
+- `RULE_SPEC.md`
+- `SECURITY.md`
+- `SECURITY_MODEL.md`
+- `V0.1_IMPLEMENTATION_PLAN.md`
+
+### `v0.2-engineering/`
+- `ADAPTER_SPEC.md`
+- `AGENT_LOOP.md`
+- `ARCHITECTURE.md`
+- `DOMAIN_MODEL.md`
+- `EVAL_SPEC.md`
+- `EVIDENCE_AND_GATES.md`
+- `IMPLEMENTATION_PLAN.md`
+- `ISSUE_BACKLOG.md`
+- `MODEL_RUNTIME.md`
+- `README.md`
+- `SECURITY.md`
+
+### `v0.3-engineering/`
+- `ADAPTER_SPEC.md`
+- `AGENT_LOOP.md`
+- `ARCHITECTURE.md`
+- `DOMAIN_MODEL.md`
+- `EVAL_SPEC.md`
+- `EVIDENCE_AND_GATES.md`
+- `IMPLEMENTATION_PLAN.md`
+- `ISSUE_BACKLOG.md`
+- `MODEL_RUNTIME.md`
+- `README.md`
+- `SECURITY.md`
+
+### `v0.4-engineering/`
+- `ADAPTER_SPEC.md`
+- `AGENT_LOOP.md`
+- `ARCHITECTURE.md`
+- `DOMAIN_MODEL.md`
+- `EVAL_SPEC.md`
+- `EVIDENCE_AND_GATES.md`
+- `IMPLEMENTATION_PLAN.md`
+- `ISSUE_BACKLOG.md`
+- `MODEL_RUNTIME.md`
+- `README.md`
+- `SECURITY.md`
+
+### `v0.5-engineering/`
+- `ADAPTER_SPEC.md`
+- `AGENT_LOOP.md`
+- `ARCHITECTURE.md`
+- `DOMAIN_MODEL.md`
+- `EVAL_SPEC.md`
+- `EVIDENCE_AND_GATES.md`
+- `IMPLEMENTATION_PLAN.md`
+- `ISSUE_BACKLOG.md`
+- `MODEL_RUNTIME.md`
+- `README.md`
+- `SECURITY.md`
+
+### `v0.6-engineering/`
+- `ADAPTER_SPEC.md`
+- `AGENT_LOOP.md`
+- `ARCHITECTURE.md`
+- `DOMAIN_MODEL.md`
+- `EVAL_SPEC.md`
+- `EVIDENCE_AND_GATES.md`
+- `IMPLEMENTATION_PLAN.md`
+- `ISSUE_BACKLOG.md`
+- `MODEL_RUNTIME.md`
+- `README.md`
+- `SECURITY.md`
+
+### `v0.7-engineering/`
+- `ADAPTER_SPEC.md`
+- `AGENT_LOOP.md`
+- `ARCHITECTURE.md`
+- `DOMAIN_MODEL.md`
+- `EVAL_SPEC.md`
+- `EVIDENCE_AND_GATES.md`
+- `IMPLEMENTATION_PLAN.md`
+- `ISSUE_BACKLOG.md`
+- `MODEL_RUNTIME.md`
+- `README.md`
+- `SECURITY.md`
+
+### `v0.8-engineering/`
+- `ADAPTER_SPEC.md`
+- `AGENT_LOOP.md`
+- `ARCHITECTURE.md`
+- `DOMAIN_MODEL.md`
+- `EVAL_SPEC.md`
+- `EVIDENCE_AND_GATES.md`
+- `IMPLEMENTATION_PLAN.md`
+- `ISSUE_BACKLOG.md`
+- `MODEL_RUNTIME.md`
+- `README.md`
+- `SECURITY.md`
+
+### `v0.9-engineering/`
+- `ADAPTER_SPEC.md`
+- `AGENT_LOOP.md`
+- `ARCHITECTURE.md`
+- `DOMAIN_MODEL.md`
+- `EVAL_SPEC.md`
+- `EVIDENCE_AND_GATES.md`
+- `IMPLEMENTATION_PLAN.md`
+- `ISSUE_BACKLOG.md`
+- `MODEL_RUNTIME.md`
+- `README.md`
+- `SECURITY.md`
+
+### `v1.0-engineering/`
+- `ADAPTER_SPEC.md`
+- `AGENT_LOOP.md`
+- `ARCHITECTURE.md`
+- `DOMAIN_MODEL.md`
+- `EVAL_SPEC.md`
+- `EVIDENCE_AND_GATES.md`
+- `IMPLEMENTATION_PLAN.md`
+- `ISSUE_BACKLOG.md`
+- `MODEL_RUNTIME.md`
+- `README.md`
+- `SECURITY.md`

@@ -1,0 +1,40 @@
+name: QA Agent Review
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install QA Agent
+        run: python -m pip install .
+      - name: Review changed tests
+        id: review
+        continue-on-error: true
+        run: qa-agent review . --base "origin/${{ github.base_ref || 'main' }}" --format sarif > qa-agent.sarif
+      - name: Publish review summary
+        if: always()
+        run: |
+          echo "## QA Agent v0.1" >> "$GITHUB_STEP_SUMMARY"
+          echo "SARIF report generated: `qa-agent.sarif`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Review step outcome: `${{ steps.review.outcome }}`" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload SARIF report
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: qa-agent.sarif
+      - name: Enforce review decision
+        if: steps.review.outcome == 'failure'
+        run: exit 1
