@@ -8,3 +8,7 @@ dist/
 build/
 *.egg-info/
 .DS_Store
+
+archive/
+output.json
+pytest_html_report.html
