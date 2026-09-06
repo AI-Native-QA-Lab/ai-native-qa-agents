@@ -332,7 +332,7 @@ Knowledge Graph
 Dashboard
 ```
 
-This scope is sufficiently narrow for a credible open-source MVP.
+This scope is sufficiently narrow for a credible source-available MVP under the PolyForm Noncommercial License 1.0.0.
 
 ---
 

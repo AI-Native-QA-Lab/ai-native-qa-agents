@@ -2,6 +2,8 @@
 
 [English project overview](../README.md) · [中文项目入口](../README.zh-CN.md)
 
+The repository is available under the [PolyForm Noncommercial License 1.0.0](../LICENSE).
+
 Every release has an independent engineering pack. The packs define the planned scope; they do not by themselves indicate that the release has been implemented.
 
 | Version | Agent-loop milestone | Engineering pack |
