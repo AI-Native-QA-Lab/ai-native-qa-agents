@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Evidence-driven QA agent reference architecture"
 requires-python = ">=3.11"
 readme = "README.md"
-license = { text = "UNLICENSED" }
+license = { text = "PolyForm Noncommercial License 1.0.0" }
 
 [project.scripts]
 qa-agent = "qa_agent.cli:main"

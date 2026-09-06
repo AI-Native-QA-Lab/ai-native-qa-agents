@@ -2,6 +2,7 @@
 
 ## Root Documents
 - `AGENT_RUNTIME_SPEC.md`
+- `LICENSE`
 - `FULL_ENGINEERING_PLAN.md`
 - `MANIFEST.md`
 - `MASTER_IMPLEMENTATION_ROADMAP.md`
@@ -9,6 +10,7 @@
 - `PROJECT_BLUEPRINT.md`
 - `PROJECT_REVIEW.md`
 - `README.md`
+- `README.zh-CN.md`
 - `ROADMAP_AND_VERSION_DESIGN.md`
 
 ## Engineering Packs

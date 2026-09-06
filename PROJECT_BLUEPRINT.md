@@ -18,7 +18,9 @@ Description:
 
 中文：
 
-> 一个面向软件交付全生命周期、以证据驱动的软件质量 Agent 开源参考架构。
+> 一个面向软件交付全生命周期、以证据驱动的软件质量 Agent 公开参考架构。
+
+License: [PolyForm Noncommercial License 1.0.0](LICENSE).
 
 ---
 

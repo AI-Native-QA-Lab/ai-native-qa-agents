@@ -2,7 +2,7 @@
 
 [简体中文](README.zh-CN.md) · [Engineering documentation](docs/README.md)
 
-An open, evidence-driven reference architecture for building AI-native software quality agents across the delivery lifecycle.
+A public, evidence-driven reference architecture for building AI-native software quality agents across the delivery lifecycle.
 
 The project treats an agent as a controlled runtime, rather than an unbounded model loop. Deterministic checks collect and normalize evidence; models are called only for bounded reasoning tasks; verification and quality gates determine whether a result can support a decision.
 
@@ -87,3 +87,7 @@ The initial implementation runs a bounded deterministic loop (`detect → inspec
 ## Status
 
 This repository includes an executable v0.1 baseline and versioned engineering packs for subsequent releases. The v0.1 baseline is not yet a production release.
+
+## License
+
+This project is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE). See the license for permitted uses and conditions.

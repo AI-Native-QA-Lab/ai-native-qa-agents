@@ -2,7 +2,7 @@
 
 [English](README.md) · [工程文档](docs/README.md)
 
-这是一个面向软件交付全生命周期的、以证据驱动的 AI 原生质量 Agent 参考架构。
+这是一个面向软件交付全生命周期的、公开的、以证据驱动的 AI 原生质量 Agent 参考架构。
 
 项目将 Agent 定义为受控运行时，而不是无限制的模型调用循环：确定性检查负责收集和标准化证据；模型只处理边界明确的推理任务；验证和质量门禁决定结果能否支持最终决策。
 
@@ -42,3 +42,7 @@ qa-agent config show
 - [总实施路线图](MASTER_IMPLEMENTATION_ROADMAP.md)
 - [完整工程计划](FULL_ENGINEERING_PLAN.md)
 - [项目协作规则](AGENTS.md)
+
+## 许可证
+
+本项目采用 [PolyForm Noncommercial License 1.0.0](LICENSE)。允许的用途和条件以许可证全文为准。
