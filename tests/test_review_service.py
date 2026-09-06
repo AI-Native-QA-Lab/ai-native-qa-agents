@@ -153,6 +153,34 @@ def test_diff_relevance_reports_changed_source_without_candidate_test(tmp_path: 
     assert result.coverage_gaps == [{"path": "orders.py", "confidence": 0.2, "status": "unverified"}]
 
 
+def test_review_returns_insufficient_evidence_for_an_unknown_base(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    (tmp_path / "test_ok.py").write_text("def test_ok():\n    value = 1\n    assert value == 1\n")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "-c", "user.email=qa@example.test", "-c", "user.name=QA", "commit", "-m", "initial"], cwd=tmp_path, check=True, capture_output=True)
+
+    result = ReviewService().review(ReviewRequest(repository=tmp_path, base="unknown-base"))
+
+    assert result.decision == "incomplete"
+    assert result.termination_reason == "INSUFFICIENT_EVIDENCE"
+
+
+def test_base_scopes_rule_review_to_changed_test_files(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    (tmp_path / "test_legacy.py").write_text("def test_legacy():\n    assert True\n")
+    (tmp_path / "test_changed.py").write_text("def test_changed():\n    value = 1\n    assert value == 1\n")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "-c", "user.email=qa@example.test", "-c", "user.name=QA", "commit", "-m", "initial"], cwd=tmp_path, check=True, capture_output=True)
+    (tmp_path / "test_changed.py").write_text("def test_changed():\n    value = 2\n    assert value == 2\n")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "-c", "user.email=qa@example.test", "-c", "user.name=QA", "commit", "-m", "change"], cwd=tmp_path, check=True, capture_output=True)
+
+    result = ReviewService().review(ReviewRequest(repository=tmp_path, base="HEAD~1"))
+
+    assert result.decision == "pass"
+    assert result.findings == []
+
+
 def test_relevance_score_exposes_change_and_candidate_metadata(tmp_path: Path) -> None:
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
     (tmp_path / "orders.py").write_text("def create_order():\n    return 1\n")
@@ -230,6 +258,23 @@ def test_semantic_findings_remain_unverified_with_source_evidence(tmp_path: Path
     assert finding.verification_status == "unverified"
     assert evidence.status == "unverified"
     assert not Path(evidence.path).is_absolute()
+
+
+def test_semantic_context_keeps_production_source_out_of_provider_input(tmp_path: Path) -> None:
+    (tmp_path / "checkout.py").write_text("def checkout():\n    api_key = 'do-not-send'\n")
+    (tmp_path / "test_checkout.py").write_text("def test_checkout():\n    value = 1\n    assert value == 1\n")
+    seen = []
+
+    class Provider:
+        name = "test"
+        def structured_review(self, request):
+            seen.append(request)
+            return SemanticReviewResult("intent", "good", 1.0)
+
+    ReviewService().review(ReviewRequest(repository=tmp_path, semantic_reviewer=SemanticReviewer(Provider()), max_model_calls=1))
+
+    assert seen and seen[0].nearby_production_symbol == "checkout.py: checkout"
+    assert "do-not-send" not in seen[0].nearby_production_symbol
 
 
 def test_review_does_not_pass_when_repository_is_missing(tmp_path: Path) -> None:

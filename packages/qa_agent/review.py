@@ -165,6 +165,7 @@ class ReviewService:
         model_calls = 0
         files: list[Path] = []
         diff_context = ""
+        changed_paths: set[str] | None = None
         registry = default_registry()
         actions = list(ReviewPlanner().plan())
         if request.semantic_reviewer and request.semantic_reviewer.provider:
@@ -197,9 +198,12 @@ class ReviewService:
             if action == "detect":
                 result.languages, result.frameworks = self.detect(root)
             elif action == "inspect-diff":
-                diff_context = self._diff_evidence(root, request.base, result)
+                diff = self._diff_evidence(root, request.base, result)
+                if diff is None:
+                    return result
+                diff_context, changed_paths = diff
             elif action == "discover-tests":
-                files = self._test_files(root, request)
+                files = self._test_files(root, request, changed_paths)
             elif action == "run-rules":
                 for path in files:
                     framework = "pytest" if path.suffix == ".py" else "Playwright"
@@ -217,7 +221,7 @@ class ReviewService:
                     source = path.read_text(encoding="utf-8", errors="replace")[:20_000]
                     relative = str(path.relative_to(root))
                     signals = [finding.rule_id for finding in result.findings if finding.path == relative]
-                    semantic = request.semantic_reviewer.review(build_semantic_context(source, signals, diff_context, self._nearby_production_symbol(root, path)))
+                    semantic = request.semantic_reviewer.review(build_semantic_context(source, signals, diff_context, self._nearby_production_symbol(root, path, request)))
                     if semantic and semantic.issues:
                         evidence = self._evidence(result, "ai_semantic_review", Path(path.relative_to(root)), 1, 1, source, status="unverified")
                         for issue in semantic.issues:
@@ -249,12 +253,14 @@ class ReviewService:
         playwright = any(name.endswith((".spec.ts", ".spec.js", ".test.ts", ".test.js")) for name in names) or any(name.startswith("playwright.config.") for name in names) or "@playwright/test" in package
         return ([name for name, enabled in (("Python", python), ("TypeScript", typescript)) if enabled], [name for name, enabled in (("pytest", pytest), ("Playwright", playwright)) if enabled])
 
-    def _test_files(self, root: Path, request: ReviewRequest) -> list[Path]:
+    def _test_files(self, root: Path, request: ReviewRequest, changed_paths: set[str] | None = None) -> list[Path]:
         candidates = []
         ignored = {".git", ".venv", "node_modules", "dist", "build", "__pycache__", "evals"}
         secret_names = {"credentials", "secrets"}
         for path in root.rglob("*"):
             if any(part in ignored for part in path.parts) or path.name == ".env" or path.name.startswith(".env.") or path.name in secret_names or path.name.startswith(("credentials", "secrets")) or path.suffix in {".pem", ".key"} or not path.is_file() or path.stat().st_size > request.max_file_bytes:
+                continue
+            if changed_paths is not None and str(path.relative_to(root)) not in changed_paths:
                 continue
             try:
                 if b"\x00" in path.read_bytes()[:4096]:
@@ -266,27 +272,41 @@ class ReviewService:
                 candidates.append(path)
         return sorted(candidates)[:request.max_files]
 
-    def _diff_evidence(self, root: Path, base: str | None, result: ReviewResult) -> str:
+    def _diff_evidence(self, root: Path, base: str | None, result: ReviewResult) -> tuple[str, set[str] | None] | None:
         if not base or not (root / ".git").exists():
-            return ""
+            return "", None
         try:
             completed = subprocess.run(["git", "diff", "--no-ext-diff", "--no-textconv", "--unified=0", f"{base}...HEAD"], cwd=root, text=True, capture_output=True, check=False, timeout=10)
             working = subprocess.run(["git", "diff", "--no-ext-diff", "--no-textconv", "--unified=0", "HEAD"], cwd=root, text=True, capture_output=True, check=False, timeout=10)
+            changed = subprocess.run(["git", "diff", "--no-ext-diff", "--no-textconv", "--name-only", f"{base}...HEAD"], cwd=root, text=True, capture_output=True, check=False, timeout=10)
+            working_names = subprocess.run(["git", "diff", "--no-ext-diff", "--no-textconv", "--name-only", "HEAD"], cwd=root, text=True, capture_output=True, check=False, timeout=10)
         except subprocess.TimeoutExpired:
-            result.termination_reason = "TIMEOUT"
-            result.decision = "incomplete"
-            return ""
+            result.termination_reason, result.decision = "TIMEOUT", "incomplete"
+            result.gate = GateResult("incomplete", list(result.gate.fail_on) if result.gate else ["critical"], 0, 0.0, "unknown")
+            return None
+        if any(command.returncode for command in (completed, working, changed, working_names)):
+            result.termination_reason, result.decision = "INSUFFICIENT_EVIDENCE", "incomplete"
+            result.gate = GateResult("incomplete", ["critical"], 0, 0.0, "unknown")
+            return None
         completed.stdout += working.stdout
-        if completed.returncode == 0 and completed.stdout:
+        if completed.stdout:
             self._evidence(result, "git_diff", Path("."), 1, 1, completed.stdout)
-        return completed.stdout[:20_000]
+        return completed.stdout[:20_000], set(filter(None, (changed.stdout + working_names.stdout).splitlines()))
 
-    def _nearby_production_symbol(self, root: Path, test_path: Path) -> str:
-        """Return only a same-stem production file; never send a repository dump."""
+    def _nearby_production_symbol(self, root: Path, test_path: Path, request: ReviewRequest) -> str:
+        """Return only safe symbol names; repository source never leaves this boundary."""
         stem = test_path.stem.replace("test_", "").replace(".spec", "").replace(".test", "")
         for path in root.rglob("*"):
-            if path.is_file() and path.stem == stem and path != test_path and path.suffix in {".py", ".ts", ".tsx", ".js"}:
-                return path.read_text(encoding="utf-8", errors="replace")[:8_000]
+            if not path.is_file() or path == test_path or path.stem != stem or path.suffix not in {".py", ".ts", ".tsx", ".js"}:
+                continue
+            if any(part in {".git", ".venv", "node_modules", "dist", "build", "__pycache__"} for part in path.parts) or path.name.startswith(("credentials", "secrets", ".env")) or path.stat().st_size > request.max_file_bytes:
+                continue
+            try:
+                source = path.read_text(encoding="utf-8", errors="strict")
+            except (OSError, UnicodeError):
+                continue
+            symbols = re.findall(r"^\s*(?:async\s+)?(?:def|function|class)\s+([A-Za-z_$][\w$]*)", source, re.MULTILINE)
+            return f"{path.relative_to(root)}: " + ", ".join(symbols[:20])
         return ""
 
     def _find_related_test_gaps(self, root: Path, base: str | None, tests: list[Path], result: ReviewResult) -> None:
@@ -322,10 +342,8 @@ class ReviewService:
             except SyntaxError:
                 return
             clean = self._strip_python_comments(code)
-            if re.search(r"\b(?:TODO|NotImplemented)\b", code):
-                clean += "\nTODO"
             assertion = any(isinstance(item, ast.Assert) for item in ast.walk(tree)) or any(isinstance(item, ast.Call) and isinstance(item.func, ast.Attribute) and item.func.attr == "raises" for item in ast.walk(tree))
-            self._python_rules(result, relative, start, end, clean, request, assertion)
+            self._python_rules(result, relative, start, end, clean, request, assertion, self._has_python_todo(code))
         else:
             self._typescript_rules(result, relative, start, end, code, request)
 
@@ -335,8 +353,14 @@ class ReviewService:
         except (IndentationError, tokenize.TokenError):
             return source
 
-    def _python_rules(self, result: ReviewResult, path: str, start: int, end: int, code: str, request: ReviewRequest, assertion: bool) -> None:
-        for match in RuleRunner(RuleRegistry.default()).run(RuleContext(path, code, "python", "pytest", assertion)):
+    def _has_python_todo(self, source: str) -> bool:
+        try:
+            return any(token.type == tokenize.COMMENT and re.search(r"\b(?:TODO|FIXME)\b", token.string) for token in tokenize.generate_tokens(io.StringIO(source).readline))
+        except (IndentationError, tokenize.TokenError):
+            return False
+
+    def _python_rules(self, result: ReviewResult, path: str, start: int, end: int, code: str, request: ReviewRequest, assertion: bool, todo: bool = False) -> None:
+        for match in RuleRunner(RuleRegistry.default()).run(RuleContext(path, code, "python", "pytest", assertion, todo)):
             self._finding(result, match.rule_id, match.severity, match.title, match.message, path, start, end, code, request)
         return
         empty = bool(re.search(r"^\s*(pass|\.\.\.)\s*$", "\n".join(code.splitlines()[1:]), re.MULTILINE))

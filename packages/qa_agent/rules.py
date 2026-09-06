@@ -14,6 +14,7 @@ class RuleContext:
     language: str
     framework: str
     assertion: bool = False
+    todo: bool = False
 
 
 @dataclass(frozen=True)
@@ -97,12 +98,21 @@ def _no_observable_outcome(context: RuleContext) -> bool:
     return _no_assertion(context) or _always_pass(context)
 
 
+def _skipped(context: RuleContext) -> bool:
+    pattern = r"^\s*@(?:pytest\.)?mark\.(?:skip|xfail)\b" if _python(context) else r"^\s*(?:test|it)\.skip\b"
+    return bool(re.search(pattern, context.code, re.MULTILINE))
+
+
+def _todo(context: RuleContext) -> bool:
+    return context.todo if _python(context) else bool(re.search(r"\b(?:TODO|FIXME|NotImplemented)\b", context.code))
+
+
 def _rules() -> tuple[Rule, ...]:
     return (
         Rule("TQ001", "high", "No assertion", "Test has no explicit or framework assertion.", _no_assertion),
-        Rule("TQ002", "medium", "Skipped test", "Test is marked skip or xfail.", _has(r"@(?:pytest\.)?mark\.(?:skip|xfail)\b|\b(?:test|it)\.skip\b")),
+        Rule("TQ002", "medium", "Skipped test", "Test is marked skip or xfail.", _skipped),
         Rule("TQ003", "high", "Empty test", "Test body is only a placeholder.", _empty),
-        Rule("TQ004", "medium", "Todo test", "Test contains an unfinished placeholder.", _has(r"\b(?:TODO|FIXME|NotImplemented)\b")),
+        Rule("TQ004", "medium", "Todo test", "Test contains an unfinished placeholder.", _todo),
         Rule("TQ005", "critical", "Always-pass assertion", "Assertion is constant and cannot verify behavior.", _always_pass),
         Rule("TQ006", "high", "Swallowed exception", "Test catches an exception without making failure observable.", _swallowed_exception),
         Rule("TQ007", "medium", "Excessive mocking", "Mock count is high relative to behavior assertions.", _excessive_mocks),
@@ -110,7 +120,7 @@ def _rules() -> tuple[Rule, ...]:
         Rule("TQ009", "low", "Duplicated assertion", "Repeated assertion adds no verification value.", _duplicate_assertion),
         Rule("TQ010", "medium", "Status-only API assertion", "Test only asserts the response status.", _status_only),
         Rule("TQ011", "medium", "Screenshot-only E2E test", "Screenshot is not a business assertion.", lambda c: c.language == "typescript" and "page.screenshot" in c.code and not bool(re.search(r"\bexpect\s*\(", c.code))),
-        Rule("TQ012", "medium", "Sleep-based test", "Fixed sleep is used instead of a condition.", lambda c: bool(re.search(r"\btime\.sleep\s*\(", c.code)) if _python(c) else "page.waitForTimeout" in c.code),
+        Rule("TQ012", "medium", "Sleep-based test", "Fixed sleep is used instead of a condition.", lambda c: bool(re.search(r"^\s*time\.sleep\s*\(", c.code, re.MULTILINE)) if _python(c) else bool(re.search(r"^\s*(?:await\s+)?page\.waitForTimeout\s*\(", c.code, re.MULTILINE))),
         Rule("TQ013", "low", "Hardcoded success path", "Test constructs its own successful result instead of observing behavior.", _hardcoded_success),
         Rule("TQ014", "high", "No observable outcome", "Test has no meaningful observable outcome.", _no_observable_outcome),
         Rule("TQ015", "high", "Broad exception catch", "Test catches a broad exception type.", lambda c: bool(re.search(r"except\s+(?:Exception|BaseException)\b", c.code)) if _python(c) else bool(re.search(r"catch\s*\([^)]*(?:error|e|err)[^)]*\)\s*\{\s*\}", c.code, re.DOTALL))),
