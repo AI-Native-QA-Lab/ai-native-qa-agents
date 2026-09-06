@@ -54,7 +54,8 @@ def _empty(context: RuleContext) -> bool:
 
 
 def _always_pass(context: RuleContext) -> bool:
-    return bool(re.search(r"assert\s+(?:True|1\s*==\s*1)\b", context.code)) if _python(context) else bool(re.search(r"expect\s*\(\s*true\s*\)\.toBe\s*\(\s*true\s*\)", context.code))
+    pattern = r"^\s*assert\s+(?:True|1\s*==\s*1)\s*$" if _python(context) else r"^\s*expect\s*\(\s*true\s*\)\.toBe\s*\(\s*true\s*\)\s*;?\s*$"
+    return bool(re.search(pattern, context.code, re.MULTILINE))
 
 
 def _swallowed_exception(context: RuleContext) -> bool:

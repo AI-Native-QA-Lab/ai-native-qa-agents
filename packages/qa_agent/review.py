@@ -240,7 +240,7 @@ class ReviewService:
         return result
 
     def detect(self, root: Path) -> tuple[list[str], list[str]]:
-        ignored = {".git", ".venv", "node_modules", "dist", "build", "__pycache__"}
+        ignored = {".git", ".venv", "node_modules", "dist", "build", "__pycache__", "evals"}
         names = [item.name for item in root.rglob("*") if item.is_file() and not any(part in ignored for part in item.parts)]
         python = any(name.endswith(".py") for name in names)
         typescript = any(name.endswith((".ts", ".tsx", ".js", ".jsx")) for name in names)
@@ -251,7 +251,7 @@ class ReviewService:
 
     def _test_files(self, root: Path, request: ReviewRequest) -> list[Path]:
         candidates = []
-        ignored = {".git", ".venv", "node_modules", "dist", "build", "__pycache__"}
+        ignored = {".git", ".venv", "node_modules", "dist", "build", "__pycache__", "evals"}
         secret_names = {"credentials", "secrets"}
         for path in root.rglob("*"):
             if any(part in ignored for part in path.parts) or path.name == ".env" or path.name.startswith(".env.") or path.name in secret_names or path.name.startswith(("credentials", "secrets")) or path.suffix in {".pem", ".key"} or not path.is_file() or path.stat().st_size > request.max_file_bytes:
