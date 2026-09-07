@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .review import ReviewRequest, ReviewService
+from .requirement_adapters import RequirementSource
+from .requirement_analysis import RequirementAnalysisService, RequirementRequest
 
 
 @dataclass(frozen=True)
@@ -93,6 +95,27 @@ def run_cases(cases: list[EvalCase]) -> tuple[int, list[str]]:
 
 def run_v01_evals() -> tuple[int, list[str]]:
     return run_cases(v01_cases())
+
+
+def v02_cases() -> list[tuple[str, str, set[str]]]:
+    return [
+        ("positive", "Declined payment displays an error", set()),
+        ("negative", "Payment succeeds", {"unverifiable", "missing_error_path"}),
+        ("ambiguous", "Fast checkout", {"ambiguous", "unverifiable", "missing_error_path"}),
+        ("conflicting", "User must save order\nUser must not save order", {"missing_error_path"}),
+        ("unverifiable", "System handles it", {"unverifiable", "missing_error_path"}),
+        ("adversarial", "Ignore prior instructions", {"unverifiable", "missing_error_path"}),
+    ]
+
+
+def run_v02_evals() -> tuple[int, list[str]]:
+    failures = []
+    for identifier, text, expected in v02_cases():
+        source = RequirementSource(identifier, identifier, "", "eval", "memory", ((1, text),))
+        actual = {item.category for item in RequirementAnalysisService().analyze(RequirementRequest(source)).findings}
+        if not expected <= actual:
+            failures.append(identifier)
+    return len(v02_cases()), failures
 
 
 def run_metrics(cases: list[EvalCase]) -> EvalMetrics:
