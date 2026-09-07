@@ -22,3 +22,20 @@ def test_service_accepts_passing_test_only_patch(tmp_path: Path) -> None:
 
     assert result.status.decision == "accepted"
     assert result.execution.passed is True
+
+
+def test_service_stops_after_configured_repairs(tmp_path: Path) -> None:
+    from qa_agent.test_engineering import GeneratedPatch, PatchFile
+    from qa_agent.test_engineering_service import TestEngineeringRequest, TestEngineeringService
+
+    class Generator:
+        def generate(self, plan, previous=None):
+            return GeneratedPatch("GP-1", (PatchFile("tests/test_generated.py", "def test_generated():\n    assert False\n"),), ("EV-GEN-001",))
+
+    (tmp_path / "tests").mkdir()
+    result = TestEngineeringService(generator=Generator()).run(
+        TestEngineeringRequest("REQ-1", tmp_path, ("EV-REQ-001",), max_repairs=1)
+    )
+
+    assert result.status.termination_reason == "BUDGET_EXHAUSTED"
+    assert len(result.repairs) == 1

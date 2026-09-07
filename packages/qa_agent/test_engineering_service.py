@@ -8,7 +8,7 @@ from typing import Protocol
 
 from .execution import PytestExecutionBackend
 from .runtime import ExecutionBudget, LoopTrace
-from .test_engineering import GeneratedPatch, TestCandidateStatus, TestEngineeringResult, TestIntent, TestPlan, TestScenario
+from .test_engineering import GeneratedPatch, RepairAttempt, TestCandidateStatus, TestEngineeringResult, TestIntent, TestPlan, TestScenario
 
 
 class TestGenerator(Protocol):
@@ -39,6 +39,14 @@ class TestEngineeringService:
         plan = TestPlan("TP-" + request.requirement_id, intent.id, "pytest", (scenario,), request.requirement_evidence_ids)
         patch = self.generator.generate(plan)
         execution = self.backend.execute(request.repository, patch, request.timeout_seconds, request.test_roots)
+        repairs: list[RepairAttempt] = []
+        for number in range(1, request.max_repairs + 1):
+            if execution.passed:
+                break
+            repairs.append(RepairAttempt(number, patch.id, "execution failed", execution.evidence_ids))
+            patch = self.generator.generate(plan, patch)
+            execution = self.backend.execute(request.repository, patch, request.timeout_seconds, request.test_roots)
         evidence_ids = tuple(dict.fromkeys((*request.requirement_evidence_ids, *patch.evidence_ids, *execution.evidence_ids)))
-        status = TestCandidateStatus("accepted" if execution.passed else "rejected", execution.termination_reason, evidence_ids)
-        return TestEngineeringResult(intent=intent, plan=plan, patch=patch, execution=execution, status=status, evidence_ids=evidence_ids, loop_trace=[LoopTrace(1, "generate", "completed"), LoopTrace(2, "execute", "completed"), LoopTrace(3, "review", "completed")], budget=budget)
+        exhausted = not execution.passed and request.max_repairs > 0
+        status = TestCandidateStatus("accepted" if execution.passed else "incomplete" if exhausted else "rejected", "EVIDENCE_SUFFICIENT" if execution.passed else "BUDGET_EXHAUSTED" if exhausted else execution.termination_reason, evidence_ids)
+        return TestEngineeringResult(intent=intent, plan=plan, patch=patch, execution=execution, repairs=repairs, status=status, evidence_ids=evidence_ids, loop_trace=[LoopTrace(1, "generate", "completed"), LoopTrace(2, "execute", "completed"), LoopTrace(3, "review", "completed")], budget=budget)
