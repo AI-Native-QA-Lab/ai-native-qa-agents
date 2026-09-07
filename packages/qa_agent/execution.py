@@ -35,19 +35,18 @@ class PytestExecutionBackend:
     def execute(self, repository: Path, patch: GeneratedPatch, timeout_seconds: int, test_roots: tuple[str, ...] = ("tests",)) -> ExecutionResult:
         validate_patch(patch, test_roots)
         started = time.monotonic()
-        pytest = shutil.which("pytest")
-        if pytest is None:
+        docker = shutil.which("docker")
+        if docker is None:
             return ExecutionResult("pytest", (), None, False, "INSUFFICIENT_EVIDENCE", None, None, 0, ("EV-EXEC-UNAVAILABLE",))
         with tempfile.TemporaryDirectory() as directory:
-            sandbox = Path(directory) / "repository"
-            shutil.copytree(repository, sandbox, ignore=_ignore)
+            patch_root = Path(directory) / "patch"
             for file in patch.files:
-                target = sandbox / file.path
+                target = patch_root / file.path
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(file.content, encoding="utf-8")
-            command = (pytest, *[file.path for file in patch.files])
+            command = (docker, "run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--pids-limit", "64", "--memory", "256m", "--cpus", "1", "--tmpfs", "/work:rw,noexec,nosuid,size=64m,uid=10001,gid=10001", "-v", f"{repository.resolve()}:/source:ro", "-v", f"{patch_root}:/patch:ro", "ai-native-qa-pytest:3.11", "/bin/sh", "-c", "cp -R /source/. /work && cp -R /patch/. /work && cd /work && pytest " + " ".join(file.path for file in patch.files))
             try:
-                completed = subprocess.run(command, cwd=sandbox, text=True, capture_output=True, timeout=timeout_seconds, check=False)
+                completed = subprocess.run(command, text=True, capture_output=True, timeout=timeout_seconds, check=False)
             except subprocess.TimeoutExpired as error:
                 output = (error.stdout or "") + (error.stderr or "")
                 return ExecutionResult("pytest", command, None, False, "TIMEOUT", _digest(output), None, round((time.monotonic() - started) * 1000), ("EV-EXEC-001",))

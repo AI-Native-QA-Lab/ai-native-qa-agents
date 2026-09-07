@@ -72,7 +72,7 @@ def test_engineer_test_uses_persisted_requirement_and_local_generator(tmp_path: 
     fixture = tmp_path / "candidate.json"
     repository = tmp_path / "repository"
     requirement.write_text("# Checkout\n\n## Acceptance Criteria\n- Declined payment displays an error\n")
-    fixture.write_text('{"files":[{"path":"tests/test_generated.py","content":"def test_generated():\\n    assert True\\n"}]}')
+    fixture.write_text('{"files":[{"path":"tests/test_generated.py","content":"def test_generated():\\n    value = 1\\n    assert value == 1\\n"}]}')
     (repository / "tests").mkdir(parents=True)
 
     assert main(["analyze-requirement", str(requirement), "--trace-db", str(database)]) == 0

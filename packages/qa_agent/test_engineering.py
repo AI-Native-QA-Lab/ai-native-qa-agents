@@ -142,6 +142,7 @@ class TestEngineeringResult:
     execution: ExecutionResult | None = None
     repairs: list[RepairAttempt] = field(default_factory=list)
     status: TestCandidateStatus | None = None
+    gates: dict[str, str] = field(default_factory=dict)
     evidence_ids: tuple[str, ...] = ()
     loop_trace: list[LoopTrace] = field(default_factory=list)
     budget: ExecutionBudget = field(default_factory=ExecutionBudget)
@@ -155,6 +156,7 @@ class TestEngineeringResult:
             "execution": asdict(self.execution) if self.execution else None,
             "repairs": [asdict(item) for item in self.repairs],
             "status": asdict(self.status) if self.status else None,
+            "gates": self.gates,
             "evidence_ids": list(self.evidence_ids),
             "loop_trace": [asdict(item) for item in self.loop_trace],
             "budget": asdict(self.budget),

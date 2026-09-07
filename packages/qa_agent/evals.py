@@ -128,7 +128,7 @@ def run_v03_evals() -> tuple[int, list[str]]:
     from .test_engineering_service import TestEngineeringRequest, TestEngineeringService
 
     failures: list[str] = []
-    cases = (("passing", "assert True", "accepted"), ("failing", "assert False", "rejected"), ("unsafe", "assert True", "unsafe"))
+    cases = (("passing", "value = 1\n    assert value == 1", "accepted"), ("failing", "value = 1\n    assert value == 2", "rejected"), ("unsafe", "value = 1\n    assert value == 1", "rejected"))
     for identifier, assertion, expected in cases:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -139,13 +139,9 @@ def run_v03_evals() -> tuple[int, list[str]]:
                 def generate(self, plan, previous=None):
                     return GeneratedPatch("GP-" + identifier, (PatchFile(path, f"def test_generated():\n    {assertion}\n"),), ("EV-GEN-001",))
 
-            try:
-                result = TestEngineeringService(Generator()).run(TestEngineeringRequest("REQ-1", root, ("EV-REQ-001",)))
-                if result.status.decision != expected:
-                    failures.append(identifier)
-            except ValueError:
-                if expected != "unsafe":
-                    failures.append(identifier)
+            result = TestEngineeringService(Generator()).run(TestEngineeringRequest("REQ-1", root, ("EV-REQ-001",)))
+            if result.status.decision != expected:
+                failures.append(identifier)
     return len(cases), failures
 
 

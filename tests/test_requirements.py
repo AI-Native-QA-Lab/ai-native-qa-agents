@@ -2,7 +2,7 @@ import pytest
 
 
 def test_requirement_result_has_v02_schema() -> None:
-    from qa_agent.requirements import AcceptanceCriterion, Requirement, RequirementResult
+    from qa_agent.requirements import AcceptanceCriterion, Requirement, RequirementContext, RequirementResult
 
     requirement = Requirement(
         "REQ-1",
@@ -13,10 +13,11 @@ def test_requirement_result_has_v02_schema() -> None:
         (AcceptanceCriterion("REQ-1-AC-1", "Payment succeeds", 3),),
     )
 
-    payload = RequirementResult(requirement=requirement).to_dict()
+    payload = RequirementResult(requirement=requirement, context=RequirementContext("CTX-1", requirement.id, ("EV-1",), ("checkout.py",))).to_dict()
 
     assert payload["schema_version"] == "v0.2"
     assert payload["requirement"]["acceptance_criteria"][0]["line"] == 3
+    assert payload["context"]["repository_paths"] == ("checkout.py",)
 
 
 def test_trace_link_confidence_does_not_upgrade_unverified_status() -> None:

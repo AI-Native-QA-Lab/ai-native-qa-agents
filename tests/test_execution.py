@@ -24,6 +24,9 @@ def test_pytest_execution_applies_patch_only_in_sandbox(tmp_path: Path) -> None:
     result = PytestExecutionBackend().execute(tmp_path, _patch("tests/test_generated.py"), 10)
 
     assert result.passed is True
+    assert Path(result.command[0]).name == "docker"
+    assert "--network" in result.command and "none" in result.command
+    assert "--read-only" in result.command
     assert not (tmp_path / "tests" / "test_generated.py").exists()
 
 

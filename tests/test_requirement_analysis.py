@@ -9,6 +9,8 @@ def test_analysis_emits_evidenced_requirement_findings() -> None:
 
     assert {item.category for item in result.findings} >= {"ambiguous", "unverifiable", "missing_error_path"}
     assert all(item.evidence_ids for item in result.findings)
+    assert result.context is not None
+    assert result.context.evidence_ids == tuple(item.id for item in result.evidence)
 
 
 def test_analysis_reports_evidenced_conflicting_criteria() -> None:
@@ -27,6 +29,27 @@ def test_analysis_reports_evidenced_conflicting_criteria() -> None:
 
     assert any(item.category == "conflicting_criteria" for item in result.findings)
     assert all(item.evidence_ids for item in result.findings)
+
+
+def test_analysis_reports_conflicts_when_negated_criterion_comes_first() -> None:
+    from qa_agent.requirement_analysis import RequirementAnalysisService, RequirementRequest
+
+    source = RequirementSource("REQ-1", "Orders", "", "markdown", "req.md", ((2, "User must not save the order"), (3, "User must save the order")))
+
+    result = RequirementAnalysisService().analyze(RequirementRequest(source))
+
+    assert any(item.category == "conflicting_criteria" for item in result.findings)
+
+
+def test_analysis_stops_before_scanning_more_criteria_than_budget() -> None:
+    from qa_agent.requirement_analysis import RequirementAnalysisService, RequirementRequest
+
+    source = RequirementSource("REQ-1", "Orders", "", "markdown", "req.md", tuple((line, "Payment succeeds") for line in range(1, 10)))
+
+    result = RequirementAnalysisService().analyze(RequirementRequest(source, max_actions=4))
+
+    assert result.termination_reason == "BUDGET_EXHAUSTED"
+    assert len(result.evidence) < 9
 
 
 def test_analysis_stops_when_budget_exhausted() -> None:
