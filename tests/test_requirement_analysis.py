@@ -37,6 +37,21 @@ def test_analysis_stops_when_budget_exhausted() -> None:
     assert (result.decision, result.termination_reason) == ("incomplete", "BUDGET_EXHAUSTED")
 
 
+def test_requirement_review_keeps_requirement_and_review_evidence(tmp_path) -> None:
+    from qa_agent.requirement_analysis import RequirementAnalysisService
+    from qa_agent.requirements import Requirement
+    from qa_agent.review import Evidence
+
+    requirement = Requirement("REQ-1", "Checkout", "", "markdown", "req.md")
+    requirement_evidence = [Evidence("EV-REQ-001", "requirement", "req.md", 1, 1, "sha256:x")]
+    (tmp_path / "test_empty.py").write_text("def test_empty():\n    pass\n")
+
+    result = RequirementAnalysisService().review_pr(requirement, requirement_evidence, tmp_path)
+
+    assert "EV-REQ-001" in {item.id for item in result.evidence}
+    assert result.gate is not None
+
+
 def test_requirement_aware_review_is_incomplete_without_requirement_evidence(tmp_path) -> None:
     from qa_agent.requirement_analysis import RequirementAnalysisService
     from qa_agent.requirements import Requirement

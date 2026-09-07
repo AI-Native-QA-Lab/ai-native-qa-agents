@@ -72,6 +72,14 @@ class RequirementAnalysisService:
         review = ReviewService().review(ReviewRequest(repository, base=base))
         if review.decision == "incomplete":
             return RequirementResult(requirement=requirement, evidence=requirement_evidence, decision="incomplete", termination_reason=review.termination_reason)
-        result = RequirementResult(requirement=requirement, evidence=[*requirement_evidence, *review.evidence], decision=review.decision, termination_reason=review.termination_reason)
+        result = RequirementResult(
+            requirement=requirement,
+            evidence=[*requirement_evidence, *review.evidence],
+            decision=review.decision,
+            termination_reason=review.termination_reason,
+            gate=review.gate,
+            loop_trace=review.loop_trace,
+            budget=review.budget,
+        )
         result.findings = [TestabilityFinding(item.id, item.rule_id, item.severity, item.message, None, tuple(item.evidence_ids), item.verification_status, item.confidence) for item in review.findings]
         return result
