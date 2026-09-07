@@ -1,4 +1,4 @@
-from qa_agent.evals import EvalCase, run_cases, run_metrics, run_v01_evals, run_v02_evals, v01_cases
+from qa_agent.evals import EvalCase, run_cases, run_metrics, run_v01_evals, run_v02_evals, run_v03_evals, v01_cases
 
 
 def test_v01_eval_catalog_has_80_labeled_cases() -> None:
@@ -31,4 +31,11 @@ def test_v02_eval_catalog_covers_required_requirement_cases() -> None:
     total, failures = run_v02_evals()
 
     assert total >= 8
+    assert failures == []
+
+
+def test_v03_eval_catalog_covers_safe_generation_cases() -> None:
+    total, failures = run_v03_evals()
+
+    assert total >= 3
     assert failures == []

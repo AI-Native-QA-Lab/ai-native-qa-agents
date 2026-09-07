@@ -25,3 +25,12 @@ def test_pytest_execution_applies_patch_only_in_sandbox(tmp_path: Path) -> None:
 
     assert result.passed is True
     assert not (tmp_path / "tests" / "test_generated.py").exists()
+
+
+def test_playwright_backend_reports_unavailable_without_installing(tmp_path: Path) -> None:
+    from qa_agent.execution import PlaywrightExecutionBackend
+
+    result = PlaywrightExecutionBackend(executable="does-not-exist").execute(tmp_path, _patch("tests/test_generated.py"), 1)
+
+    assert result.termination_reason == "INSUFFICIENT_EVIDENCE"
+    assert result.command == ()

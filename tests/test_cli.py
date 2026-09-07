@@ -64,3 +64,18 @@ def test_human_report_labels_coverage_gaps_correctly() -> None:
 
 def test_human_report_marks_incomplete_review_risk_unknown() -> None:
     assert "Risk: unknown" in render_human(ReviewResult(decision="incomplete"))
+
+
+def test_engineer_test_uses_persisted_requirement_and_local_generator(tmp_path: Path, capsys) -> None:
+    requirement = tmp_path / "checkout.md"
+    database = tmp_path / "trace.db"
+    fixture = tmp_path / "candidate.json"
+    repository = tmp_path / "repository"
+    requirement.write_text("# Checkout\n\n## Acceptance Criteria\n- Declined payment displays an error\n")
+    fixture.write_text('{"files":[{"path":"tests/test_generated.py","content":"def test_generated():\\n    assert True\\n"}]}')
+    (repository / "tests").mkdir(parents=True)
+
+    assert main(["analyze-requirement", str(requirement), "--trace-db", str(database)]) == 0
+    assert main(["engineer-test", "--requirement", "checkout", "--repository", str(repository), "--trace-db", str(database), "--generator-file", str(fixture), "--format", "json"]) == 0
+
+    assert '"decision": "accepted"' in capsys.readouterr().out

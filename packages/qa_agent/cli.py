@@ -8,12 +8,14 @@ from .review import ReviewRequest, ReviewService
 from .reporting import render_human, render_requirement_human
 from .config import load_config
 from .rules import RuleRegistry
-from .evals import run_metrics, run_v02_evals, v01_cases
+from .evals import run_metrics, run_v02_evals, run_v03_evals, v01_cases
 from .requirement_adapters import GitHubIssueAdapter, MarkdownRequirementAdapter
 from .requirement_analysis import RequirementAnalysisService, RequirementRequest
 from .requirement_mapping import map_requirement
 from .trace_store import SQLiteTraceStore
 from .requirements import RequirementResult
+from .test_generation import JsonTestGenerator
+from .test_engineering_service import TestEngineeringRequest, TestEngineeringService
 
 
 def _render_requirement(result: RequirementResult, output_format: str) -> None:
@@ -35,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     rules_subcommands = rules.add_subparsers(dest="rules_command", required=True)
     rules_subcommands.add_parser("list", help="List enabled v0.1 rules")
     eval_command = commands.add_parser("eval", help="Run deterministic eval metrics")
-    eval_command.add_argument("--version", choices=("v0.1", "v0.2"), default="v0.1")
+    eval_command.add_argument("--version", choices=("v0.1", "v0.2", "v0.3"), default="v0.1")
     config = commands.add_parser("config", help="Show v0.1 runtime defaults")
     config_subcommands = config.add_subparsers(dest="config_command", required=True)
     config_subcommands.add_parser("show", help="Print the effective default configuration")
@@ -55,6 +57,12 @@ def main(argv: list[str] | None = None) -> int:
     review_pr.add_argument("--github-issue-file", type=Path)
     review_pr.add_argument("--base")
     review_pr.add_argument("--format", choices=("human", "json"), default="human")
+    engineer = commands.add_parser("engineer-test", help="Generate and validate a test candidate")
+    engineer.add_argument("--requirement", required=True)
+    engineer.add_argument("--repository", type=Path, required=True)
+    engineer.add_argument("--trace-db", type=Path, required=True)
+    engineer.add_argument("--generator-file", type=Path, required=True)
+    engineer.add_argument("--format", choices=("human", "json"), default="human")
     args = parser.parse_args(argv)
     service = ReviewService()
     if args.command == "analyze-requirement":
@@ -90,6 +98,18 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         _render_requirement(result, args.format)
         return {"pass": 0, "warn": 0, "fail": 1}.get(result.decision, 2)
+    if args.command == "engineer-test":
+        store = SQLiteTraceStore(args.trace_db)
+        requirement = store.get_requirement(args.requirement)
+        evidence = store.get_evidence(args.requirement)
+        if requirement is None:
+            print(json.dumps({"decision": "incomplete", "termination_reason": "INSUFFICIENT_EVIDENCE"}))
+            return 2
+        result = TestEngineeringService(JsonTestGenerator(args.generator_file)).run(
+            TestEngineeringRequest(requirement.id, args.repository, tuple(item.id for item in evidence))
+        )
+        print(json.dumps(result.to_dict(), indent=2, sort_keys=True) if args.format == "json" else f"Decision: {result.status.decision}\nTermination: {result.status.termination_reason}")
+        return 0 if result.status.decision == "accepted" else 2 if result.status.decision == "incomplete" else 1
     if args.command == "detect":
         languages, frameworks = service.detect(args.repository)
         print("Languages:\n" + "\n".join(f"- {item}" for item in languages))
@@ -104,6 +124,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "eval":
         if args.version == "v0.2":
             total, failures = run_v02_evals()
+            print(json.dumps({"cases": total, "failures": failures}, indent=2, sort_keys=True))
+            return 1 if failures else 0
+        if args.version == "v0.3":
+            total, failures = run_v03_evals()
             print(json.dumps({"cases": total, "failures": failures}, indent=2, sort_keys=True))
             return 1 if failures else 0
         metrics = run_metrics(v01_cases())

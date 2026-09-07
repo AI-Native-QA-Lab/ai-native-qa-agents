@@ -123,6 +123,32 @@ def run_v02_evals() -> tuple[int, list[str]]:
     return len(v02_cases()), failures
 
 
+def run_v03_evals() -> tuple[int, list[str]]:
+    from .test_engineering import GeneratedPatch, PatchFile
+    from .test_engineering_service import TestEngineeringRequest, TestEngineeringService
+
+    failures: list[str] = []
+    cases = (("passing", "assert True", "accepted"), ("failing", "assert False", "rejected"), ("unsafe", "assert True", "unsafe"))
+    for identifier, assertion, expected in cases:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "tests").mkdir()
+            path = "src/unsafe.py" if identifier == "unsafe" else "tests/test_generated.py"
+
+            class Generator:
+                def generate(self, plan, previous=None):
+                    return GeneratedPatch("GP-" + identifier, (PatchFile(path, f"def test_generated():\n    {assertion}\n"),), ("EV-GEN-001",))
+
+            try:
+                result = TestEngineeringService(Generator()).run(TestEngineeringRequest("REQ-1", root, ("EV-REQ-001",)))
+                if result.status.decision != expected:
+                    failures.append(identifier)
+            except ValueError:
+                if expected != "unsafe":
+                    failures.append(identifier)
+    return len(cases), failures
+
+
 def run_metrics(cases: list[EvalCase]) -> EvalMetrics:
     total, failures = run_cases(cases)
     true_positive = false_positive = false_negative = 0

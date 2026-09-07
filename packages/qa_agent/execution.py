@@ -6,7 +6,6 @@ import hashlib
 from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
-import sys
 import tempfile
 import time
 
@@ -36,6 +35,9 @@ class PytestExecutionBackend:
     def execute(self, repository: Path, patch: GeneratedPatch, timeout_seconds: int, test_roots: tuple[str, ...] = ("tests",)) -> ExecutionResult:
         validate_patch(patch, test_roots)
         started = time.monotonic()
+        pytest = shutil.which("pytest")
+        if pytest is None:
+            return ExecutionResult("pytest", (), None, False, "INSUFFICIENT_EVIDENCE", None, None, 0, ("EV-EXEC-UNAVAILABLE",))
         with tempfile.TemporaryDirectory() as directory:
             sandbox = Path(directory) / "repository"
             shutil.copytree(repository, sandbox, ignore=_ignore)
@@ -43,7 +45,7 @@ class PytestExecutionBackend:
                 target = sandbox / file.path
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(file.content, encoding="utf-8")
-            command = (sys.executable, "-m", "pytest", *[file.path for file in patch.files])
+            command = (pytest, *[file.path for file in patch.files])
             try:
                 completed = subprocess.run(command, cwd=sandbox, text=True, capture_output=True, timeout=timeout_seconds, check=False)
             except subprocess.TimeoutExpired as error:
@@ -51,3 +53,16 @@ class PytestExecutionBackend:
                 return ExecutionResult("pytest", command, None, False, "TIMEOUT", _digest(output), None, round((time.monotonic() - started) * 1000), ("EV-EXEC-001",))
         output = completed.stdout + completed.stderr
         return ExecutionResult("pytest", command, completed.returncode, completed.returncode == 0, "EVIDENCE_SUFFICIENT", _digest(completed.stdout), _digest(completed.stderr), round((time.monotonic() - started) * 1000), ("EV-EXEC-001",))
+
+
+class PlaywrightExecutionBackend:
+    """Capability detector; it never installs a runner or browser binary."""
+
+    def __init__(self, executable: str = "playwright") -> None:
+        self.executable = executable
+
+    def execute(self, repository: Path, patch: GeneratedPatch, timeout_seconds: int, test_roots: tuple[str, ...] = ("tests",)) -> ExecutionResult:
+        validate_patch(patch, test_roots)
+        if shutil.which(self.executable) is None:
+            return ExecutionResult("playwright", (), None, False, "INSUFFICIENT_EVIDENCE", None, None, 0, ("EV-EXEC-UNAVAILABLE",))
+        return ExecutionResult("playwright", (self.executable,), None, False, "ERROR", None, None, 0, ("EV-EXEC-UNSUPPORTED",))
