@@ -14,6 +14,7 @@ from .review import ReviewRequest, ReviewService
 AMBIGUOUS = re.compile(r"\b(fast|easy|robust|user-friendly|appropriate)\b", re.I)
 OBSERVABLE = re.compile(r"\b(display|return|reject|redirect|status|within\s+\d+|must not|can)\b", re.I)
 ERROR = re.compile(r"\b(error|fail|declin|invalid|denied|timeout)\b", re.I)
+_REQUIRED_ACTION = re.compile(r"\bmust\s+(not\s+)?(.+?)\s*[.!]?$", re.I)
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,20 @@ class RequirementAnalysisService:
                 result.findings.append(TestabilityFinding(f"F-{len(result.findings)+1:03d}", "ambiguous", "medium", "Criterion uses subjective language", criterion.id, (evidence.id,)))
             if not OBSERVABLE.search(criterion.text):
                 result.findings.append(TestabilityFinding(f"F-{len(result.findings)+1:03d}", "unverifiable", "medium", "Criterion has no observable outcome", criterion.id, (evidence.id,)))
+        actions: dict[str, tuple[AcceptanceCriterion, Evidence]] = {}
+        for criterion, evidence in zip(requirement.acceptance_criteria, result.evidence):
+            match = _REQUIRED_ACTION.search(criterion.text)
+            if match is None:
+                continue
+            action = match.group(2).casefold()
+            if match.group(1):
+                positive = actions.get(action)
+                if positive is not None:
+                    evidence_ids = (positive[1].id, evidence.id)
+                    result.findings.append(TestabilityFinding(f"F-{len(result.findings)+1:03d}", "conflicting_criteria", "high", "Criteria require both an action and its negation", criterion.id, evidence_ids))
+                    result.risks.append(RiskItem(f"R-{len(result.risks)+1:03d}", "conflicting_criteria", "high", "Conflicting acceptance criteria prevent a deterministic test outcome", (positive[0].id, criterion.id), evidence_ids))
+            else:
+                actions[action] = (criterion, evidence)
         body = " ".join(item.text for item in requirement.acceptance_criteria)
         if not ERROR.search(body):
             evidence = result.evidence[0] if result.evidence else Evidence("EV-REQ-001", "requirement", requirement.source_ref, 1, 1, "sha256:" + hashlib.sha256(requirement.title.encode()).hexdigest())

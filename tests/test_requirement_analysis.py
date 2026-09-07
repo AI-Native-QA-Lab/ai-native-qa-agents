@@ -11,6 +11,24 @@ def test_analysis_emits_evidenced_requirement_findings() -> None:
     assert all(item.evidence_ids for item in result.findings)
 
 
+def test_analysis_reports_evidenced_conflicting_criteria() -> None:
+    from qa_agent.requirement_analysis import RequirementAnalysisService, RequirementRequest
+
+    source = RequirementSource(
+        "REQ-1",
+        "Orders",
+        "",
+        "markdown",
+        "req.md",
+        ((2, "User must save the order"), (3, "User must not save the order")),
+    )
+
+    result = RequirementAnalysisService().analyze(RequirementRequest(source))
+
+    assert any(item.category == "conflicting_criteria" for item in result.findings)
+    assert all(item.evidence_ids for item in result.findings)
+
+
 def test_analysis_stops_when_budget_exhausted() -> None:
     from qa_agent.requirement_analysis import RequirementAnalysisService, RequirementRequest
 
