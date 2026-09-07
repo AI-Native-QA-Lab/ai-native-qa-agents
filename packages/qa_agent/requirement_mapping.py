@@ -18,11 +18,15 @@ def map_requirement(requirement: Requirement, evidence_ids: tuple[str, ...], rep
         return []
     tokens = set(re.findall(r"[a-z][a-z0-9_]{2,}", (requirement.title + " " + requirement.body).lower()))
     links: list[TraceLink] = []
+    scanned = 0
     for path in sorted(repository.rglob("*")):
-        if len(links) >= max_files or not path.is_file() or any(part in _IGNORED for part in path.parts):
+        if not path.is_file() or any(part in _IGNORED for part in path.parts):
             continue
         if path.name == ".env" or path.name.startswith((".env.", "credentials", "secrets")) or path.stat().st_size > max_file_bytes:
             continue
+        if scanned >= max_files:
+            break
+        scanned += 1
         try:
             if b"\x00" in path.read_bytes()[:4096]:
                 continue
