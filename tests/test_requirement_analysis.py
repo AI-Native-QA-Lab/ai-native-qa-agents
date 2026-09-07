@@ -17,3 +17,12 @@ def test_analysis_stops_when_budget_exhausted() -> None:
     result = RequirementAnalysisService().analyze(RequirementRequest(RequirementSource("REQ-1", "Checkout", "", "markdown", "req.md"), max_actions=1))
 
     assert (result.decision, result.termination_reason) == ("incomplete", "BUDGET_EXHAUSTED")
+
+
+def test_requirement_aware_review_is_incomplete_without_requirement_evidence(tmp_path) -> None:
+    from qa_agent.requirement_analysis import RequirementAnalysisService
+    from qa_agent.requirements import Requirement
+
+    result = RequirementAnalysisService().review_pr(Requirement("REQ-1", "Checkout", "body", "markdown", "req.md"), [], tmp_path)
+
+    assert result.termination_reason == "INSUFFICIENT_EVIDENCE"

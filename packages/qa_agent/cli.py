@@ -9,7 +9,7 @@ from .reporting import render_human
 from .config import load_config
 from .rules import RuleRegistry
 from .evals import run_metrics, v01_cases
-from .requirement_adapters import MarkdownRequirementAdapter
+from .requirement_adapters import GitHubIssueAdapter, MarkdownRequirementAdapter
 from .requirement_analysis import RequirementAnalysisService, RequirementRequest
 from .requirement_mapping import map_requirement
 from .trace_store import SQLiteTraceStore
@@ -42,6 +42,13 @@ def main(argv: list[str] | None = None) -> int:
     mapping.add_argument("--repository", type=Path, required=True)
     mapping.add_argument("--trace-db", type=Path, required=True)
     mapping.add_argument("--format", choices=("human", "json"), default="human")
+    review_pr = commands.add_parser("review-pr", help="Review a repository against a requirement")
+    review_pr.add_argument("repository", type=Path)
+    review_pr.add_argument("--requirement", required=True)
+    review_pr.add_argument("--trace-db", type=Path, required=True)
+    review_pr.add_argument("--github-issue-file", type=Path)
+    review_pr.add_argument("--base")
+    review_pr.add_argument("--format", choices=("human", "json"), default="human")
     args = parser.parse_args(argv)
     service = ReviewService()
     if args.command == "analyze-requirement":
@@ -61,6 +68,21 @@ def main(argv: list[str] | None = None) -> int:
         payload = {"schema_version": "v0.2", "requirement": requirement.id, "trace_links": [item.__dict__ for item in links], "decision": "warn" if links else "incomplete", "termination_reason": "EVIDENCE_SUFFICIENT" if links else "INSUFFICIENT_EVIDENCE"}
         print(json.dumps(payload, indent=2, sort_keys=True) if args.format == "json" else f"Unverified trace links: {len(links)}")
         return 0 if links else 2
+    if args.command == "review-pr":
+        store = SQLiteTraceStore(args.trace_db)
+        if args.github_issue_file:
+            source = GitHubIssueAdapter().fetch(args.requirement, args.github_issue_file)
+            analyzed = RequirementAnalysisService().analyze(RequirementRequest(source))
+            store.save_requirement(analyzed.requirement, analyzed.evidence)
+            requirement, evidence = analyzed.requirement, analyzed.evidence
+        else:
+            requirement, evidence = store.get_requirement(args.requirement), store.get_evidence(args.requirement)
+        result = RequirementAnalysisService().review_pr(requirement, evidence, args.repository, args.base) if requirement else None
+        if result is None:
+            print(json.dumps({"decision": "incomplete", "termination_reason": "INSUFFICIENT_EVIDENCE"}))
+            return 2
+        print(json.dumps(result.to_dict(), indent=2, sort_keys=True) if args.format == "json" else f"Decision: {result.decision}\nTermination: {result.termination_reason}")
+        return {"pass": 0, "warn": 0, "fail": 1}.get(result.decision, 2)
     if args.command == "detect":
         languages, frameworks = service.detect(args.repository)
         print("Languages:\n" + "\n".join(f"- {item}" for item in languages))

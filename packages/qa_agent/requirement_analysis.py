@@ -9,6 +9,7 @@ from .requirement_adapters import RequirementSource
 from .requirements import AcceptanceCriterion, Requirement, RequirementResult, RiskItem, TestabilityFinding
 from .review import Evidence, GateResult
 from .runtime import ExecutionBudget, LoopTrace
+from .review import ReviewRequest, ReviewService
 
 AMBIGUOUS = re.compile(r"\b(fast|easy|robust|user-friendly|appropriate)\b", re.I)
 OBSERVABLE = re.compile(r"\b(display|return|reject|redirect|status|within\s+\d+|must not|can)\b", re.I)
@@ -48,4 +49,14 @@ class RequirementAnalysisService:
         result.termination_reason = "EVIDENCE_SUFFICIENT"
         result.gate = GateResult(result.decision, ["critical"], len(result.findings), 1.0, "medium" if result.findings else "low")
         result.loop_trace = [LoopTrace(index, action, "completed") for index, action in enumerate(("parse-requirement", "analyze-testability", "analyze-risk", "verify-and-gate"), 1)]
+        return result
+
+    def review_pr(self, requirement: Requirement, requirement_evidence: list[Evidence], repository, base: str | None = None) -> RequirementResult:
+        if not requirement_evidence:
+            return RequirementResult(requirement=requirement)
+        review = ReviewService().review(ReviewRequest(repository, base=base))
+        if review.decision == "incomplete":
+            return RequirementResult(requirement=requirement, evidence=requirement_evidence, decision="incomplete", termination_reason=review.termination_reason)
+        result = RequirementResult(requirement=requirement, evidence=[*requirement_evidence, *review.evidence], decision=review.decision, termination_reason=review.termination_reason)
+        result.findings = [TestabilityFinding(item.id, item.rule_id, item.severity, item.message, None, tuple(item.evidence_ids), item.verification_status, item.confidence) for item in review.findings]
         return result
