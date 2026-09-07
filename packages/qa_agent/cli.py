@@ -8,7 +8,7 @@ from .review import ReviewRequest, ReviewService
 from .reporting import render_human
 from .config import load_config
 from .rules import RuleRegistry
-from .evals import run_metrics, v01_cases
+from .evals import run_metrics, run_v02_evals, v01_cases
 from .requirement_adapters import GitHubIssueAdapter, MarkdownRequirementAdapter
 from .requirement_analysis import RequirementAnalysisService, RequirementRequest
 from .requirement_mapping import map_requirement
@@ -29,7 +29,8 @@ def main(argv: list[str] | None = None) -> int:
     rules = commands.add_parser("rules", help="Inspect deterministic rules")
     rules_subcommands = rules.add_subparsers(dest="rules_command", required=True)
     rules_subcommands.add_parser("list", help="List enabled v0.1 rules")
-    commands.add_parser("eval", help="Run v0.1 deterministic eval metrics")
+    eval_command = commands.add_parser("eval", help="Run deterministic eval metrics")
+    eval_command.add_argument("--version", choices=("v0.1", "v0.2"), default="v0.1")
     config = commands.add_parser("config", help="Show v0.1 runtime defaults")
     config_subcommands = config.add_subparsers(dest="config_command", required=True)
     config_subcommands.add_parser("show", help="Print the effective default configuration")
@@ -95,6 +96,10 @@ def main(argv: list[str] | None = None) -> int:
         print("\n".join(RuleRegistry.default().ids()))
         return 0
     if args.command == "eval":
+        if args.version == "v0.2":
+            total, failures = run_v02_evals()
+            print(json.dumps({"cases": total, "failures": failures}, indent=2, sort_keys=True))
+            return 1 if failures else 0
         metrics = run_metrics(v01_cases())
         print(json.dumps({"cases": metrics.cases, "precision": metrics.precision, "recall": metrics.recall}, indent=2, sort_keys=True))
         return 0
