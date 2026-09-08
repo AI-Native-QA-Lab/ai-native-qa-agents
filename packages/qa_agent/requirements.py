@@ -104,9 +104,24 @@ class TraceLink:
             raise ValueError("trace link confidence must be between 0 and 1")
 
 
+@dataclass(frozen=True)
+class RequirementContext:
+    id: str
+    requirement_id: str
+    evidence_ids: tuple[str, ...]
+    repository_paths: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        _required(self.id, "context id")
+        _required(self.requirement_id, "context requirement id")
+        if not self.evidence_ids:
+            raise ValueError("context evidence is required")
+
+
 @dataclass
 class RequirementResult:
     requirement: Requirement | None = None
+    context: RequirementContext | None = None
     findings: list[TestabilityFinding] = field(default_factory=list)
     risks: list[RiskItem] = field(default_factory=list)
     trace_links: list[TraceLink] = field(default_factory=list)
@@ -121,6 +136,7 @@ class RequirementResult:
         return {
             "schema_version": "v0.2",
             "requirement": asdict(self.requirement) if self.requirement else None,
+            "context": asdict(self.context) if self.context else None,
             "findings": [asdict(item) for item in self.findings],
             "risks": [asdict(item) for item in self.risks],
             "trace_links": [asdict(item) for item in self.trace_links],
