@@ -6,6 +6,7 @@ import hashlib
 from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -27,11 +28,74 @@ def _digest(value: str) -> str:
     return "sha256:" + hashlib.sha256(value.encode()).hexdigest()
 
 
-def _ignore(path: str, names: list[str]) -> set[str]:
+def _ignore(_path: str, names: list[str]) -> set[str]:
     return {name for name in names if name in {".git", ".venv", "node_modules", "__pycache__", ".pytest_cache"}}
 
 
+def _apply_test_only_patch(sandbox: Path, patch: GeneratedPatch) -> None:
+    for file in patch.files:
+        target = sandbox / file.path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(file.content, encoding="utf-8")
+
+
+def _pytest_command(targets: tuple[str, ...]) -> tuple[str, ...] | None:
+    try:
+        import pytest  # noqa: F401
+    except ImportError:
+        executable = shutil.which("pytest")
+        if executable is None:
+            return None
+        return (executable, *targets)
+    return (sys.executable, "-m", "pytest", *targets)
+
+
 class PytestExecutionBackend:
+    """Default v0.3 executor: copy into a local temp worktree and run pytest there."""
+
+    def execute(self, repository: Path, patch: GeneratedPatch, timeout_seconds: int, test_roots: tuple[str, ...] = ("tests",)) -> ExecutionResult:
+        validate_patch(patch, test_roots)
+        started = time.monotonic()
+        command = _pytest_command(tuple(file.path for file in patch.files))
+        if command is None:
+            return ExecutionResult("pytest", (), None, False, "INSUFFICIENT_EVIDENCE", None, None, 0, ("EV-EXEC-UNAVAILABLE",))
+        with tempfile.TemporaryDirectory() as directory:
+            sandbox = Path(directory) / "repository"
+            shutil.copytree(repository, sandbox, ignore=_ignore)
+            _apply_test_only_patch(sandbox, patch)
+            try:
+                completed = subprocess.run(command, cwd=sandbox, text=True, capture_output=True, timeout=timeout_seconds, check=False)
+            except subprocess.TimeoutExpired as error:
+                output = (error.stdout or "") + (error.stderr or "")
+                return ExecutionResult(
+                    "pytest",
+                    command,
+                    None,
+                    False,
+                    "TIMEOUT",
+                    _digest(output),
+                    None,
+                    round((time.monotonic() - started) * 1000),
+                    ("EV-EXEC-001",),
+                )
+            return ExecutionResult(
+                "pytest",
+                command,
+                completed.returncode,
+                completed.returncode == 0,
+                "EVIDENCE_SUFFICIENT",
+                _digest(completed.stdout),
+                _digest(completed.stderr),
+                round((time.monotonic() - started) * 1000),
+                ("EV-EXEC-001",),
+            )
+
+
+class DockerPytestExecutionBackend:
+    """Optional hardened executor. Requires a local Docker daemon and image."""
+
+    image = "ai-native-qa-pytest:3.11"
+
     def execute(self, repository: Path, patch: GeneratedPatch, timeout_seconds: int, test_roots: tuple[str, ...] = ("tests",)) -> ExecutionResult:
         validate_patch(patch, test_roots)
         started = time.monotonic()
@@ -44,14 +108,61 @@ class PytestExecutionBackend:
                 target = patch_root / file.path
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(file.content, encoding="utf-8")
-            command = (docker, "run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--pids-limit", "64", "--memory", "256m", "--cpus", "1", "--tmpfs", "/work:rw,noexec,nosuid,size=64m,uid=10001,gid=10001", "-v", f"{repository.resolve()}:/source:ro", "-v", f"{patch_root}:/patch:ro", "ai-native-qa-pytest:3.11", "/bin/sh", "-c", "cp -R /source/. /work && cp -R /patch/. /work && cd /work && pytest " + " ".join(file.path for file in patch.files))
+            targets = " ".join(file.path for file in patch.files)
+            command = (
+                docker,
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--read-only",
+                "--cap-drop",
+                "ALL",
+                "--security-opt",
+                "no-new-privileges",
+                "--pids-limit",
+                "64",
+                "--memory",
+                "256m",
+                "--cpus",
+                "1",
+                "--tmpfs",
+                "/work:rw,noexec,nosuid,size=64m,uid=10001,gid=10001",
+                "-v",
+                f"{repository.resolve()}:/source:ro",
+                "-v",
+                f"{patch_root}:/patch:ro",
+                self.image,
+                "/bin/sh",
+                "-c",
+                f"cp -R /source/. /work && cp -R /patch/. /work && cd /work && pytest {targets}",
+            )
             try:
                 completed = subprocess.run(command, text=True, capture_output=True, timeout=timeout_seconds, check=False)
             except subprocess.TimeoutExpired as error:
                 output = (error.stdout or "") + (error.stderr or "")
-                return ExecutionResult("pytest", command, None, False, "TIMEOUT", _digest(output), None, round((time.monotonic() - started) * 1000), ("EV-EXEC-001",))
-        output = completed.stdout + completed.stderr
-        return ExecutionResult("pytest", command, completed.returncode, completed.returncode == 0, "EVIDENCE_SUFFICIENT", _digest(completed.stdout), _digest(completed.stderr), round((time.monotonic() - started) * 1000), ("EV-EXEC-001",))
+                return ExecutionResult(
+                    "pytest",
+                    command,
+                    None,
+                    False,
+                    "TIMEOUT",
+                    _digest(output),
+                    None,
+                    round((time.monotonic() - started) * 1000),
+                    ("EV-EXEC-001",),
+                )
+            return ExecutionResult(
+                "pytest",
+                command,
+                completed.returncode,
+                completed.returncode == 0,
+                "EVIDENCE_SUFFICIENT",
+                _digest(completed.stdout),
+                _digest(completed.stderr),
+                round((time.monotonic() - started) * 1000),
+                ("EV-EXEC-001",),
+            )
 
 
 class PlaywrightExecutionBackend:
@@ -64,4 +175,4 @@ class PlaywrightExecutionBackend:
         validate_patch(patch, test_roots)
         if shutil.which(self.executable) is None:
             return ExecutionResult("playwright", (), None, False, "INSUFFICIENT_EVIDENCE", None, None, 0, ("EV-EXEC-UNAVAILABLE",))
-        return ExecutionResult("playwright", (self.executable,), None, False, "ERROR", None, None, 0, ("EV-EXEC-UNSUPPORTED",))
+        return ExecutionResult("playwright", (self.executable,), None, False, "INSUFFICIENT_EVIDENCE", None, None, 0, ("EV-EXEC-UNSUPPORTED",))

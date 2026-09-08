@@ -16,13 +16,16 @@
 
 ## 版本演进
 
-v0.1 从受控测试质量审查循环开始；v0.2–v0.9 逐步加入状态化重规划、修复重试、变异有效性、假设验证、PR 聚合、策略决策、生产反馈与知识沉淀；v1.0 收敛为稳定的通用 Agent Runtime。完整定义见 [路线图](ROADMAP_AND_VERSION_DESIGN.md)。
+| 版本 | 受控能力 |
+| --- | --- |
+| v0.1 | 最小受控审查循环 |
+| v0.2 | 状态化重规划与上下文扩展 |
+| v0.3 | 测试生成、执行、修复与重试 |
+| v0.4–v1.0 | 见 [路线图](ROADMAP_AND_VERSION_DESIGN.md) |
 
-当前仓库处于“文档先行”的工程蓝图阶段，尚未声明生产实现已完成。每个版本包都包含架构、实施计划、领域模型、Agent Loop、Adapter、Evidence 与 Gate、Model Runtime、Eval、安全边界和 Issue Backlog。
+当前包装版本为 **0.3.1**，可执行基线覆盖 v0.1 审查、v0.2 需求智能与 v0.3 测试工程。后续版本包在实现前仍以设计为主。
 
-从 [v0.1 工程包](docs/v0.1-engineering/README.md) 开始；它聚焦 Python/pytest 和 TypeScript/Playwright 仓库的证据驱动测试质量审查。
-
-## v0.1 快速开始
+## 快速开始
 
 ```bash
 python -m pip install .
@@ -32,7 +35,29 @@ qa-agent review . --format sarif > qa-agent.sarif
 qa-agent config show
 ```
 
-当前实现采用受限的确定性循环：`detect → inspect diff → discover tests → run rules → verify and gate`。它提供全部 15 条 v0.1 静态质量规则、YAML/JSON 配置、Evidence、loop trace 和预算元数据；默认只有 critical 会让 Gate 失败。模型语义审查默认关闭，只有显式注入 Provider 且模型预算大于 0 时才启用。
+### v0.2 需求智能
+
+```bash
+qa-agent analyze-requirement path/to/req.md --trace-db ./trace.db
+qa-agent map-coverage --requirement REQ-ID --repository . --trace-db ./trace.db
+qa-agent review-pr . --requirement REQ-ID --trace-db ./trace.db
+qa-agent eval --version v0.2
+```
+
+状态型命令必须显式传入 `--trace-db`；缺少关键证据时终止为 `INSUFFICIENT_EVIDENCE`。
+
+### v0.3 测试工程
+
+```bash
+qa-agent engineer-test \
+  --requirement REQ-ID \
+  --repository . \
+  --trace-db ./trace.db \
+  --generator-file ./candidate.json
+qa-agent eval --version v0.3
+```
+
+默认在本地临时工作副本中应用仅测试路径补丁并执行 pytest，不写入原仓库。可选加固隔离：`--execution-backend docker`。不会自动应用补丁或提交。
 
 ## 关键文档
 
@@ -42,6 +67,11 @@ qa-agent config show
 - [总实施路线图](MASTER_IMPLEMENTATION_ROADMAP.md)
 - [完整工程计划](FULL_ENGINEERING_PLAN.md)
 - [项目协作规则](AGENTS.md)
+- [更新日志](CHANGELOG_CN.md)
+
+## 状态
+
+本仓库已提供至 v0.3.1 的可执行基线，尚非生产发布。
 
 ## 许可证
 

@@ -61,9 +61,9 @@ Read the full [roadmap](ROADMAP_AND_VERSION_DESIGN.md) and choose a release pack
 └── *_SPEC.md       # Cross-version runtime contracts
 ```
 
-v0.1 implements an evidence-driven test-quality review baseline for Python/pytest and TypeScript/Playwright repositories. Start with its [engineering pack](docs/v0.1-engineering/README.md).
+Current package version is **0.3.1**. Executable baselines cover v0.1 review, v0.2 requirement intelligence, and v0.3 test engineering. Later packs remain design-first until implemented.
 
-## v0.1 quick start
+## Quick start
 
 ```bash
 python -m pip install .
@@ -73,7 +73,33 @@ qa-agent review . --format sarif > qa-agent.sarif
 qa-agent config show
 ```
 
-The initial implementation runs a bounded deterministic loop (`detect → inspect diff → discover tests → run rules → verify and gate`). It exposes all fifteen v0.1 static quality signals, attaches SHA-256-backed evidence to deterministic findings, supports YAML/JSON configuration, and fails only on critical severity by default. Semantic model review remains disabled by default and is enabled only through an injected provider and positive model budget.
+### v0.1 review
+
+Bounded deterministic loop: `detect → inspect diff → discover tests → run rules → verify and gate`. Fifteen static quality signals, SHA-256-backed evidence, YAML/JSON configuration, critical-by-default gate. Semantic model review stays disabled unless an injected provider and positive model budget are present.
+
+### v0.2 requirement intelligence
+
+```bash
+qa-agent analyze-requirement path/to/req.md --trace-db ./trace.db
+qa-agent map-coverage --requirement REQ-ID --repository . --trace-db ./trace.db
+qa-agent review-pr . --requirement REQ-ID --trace-db ./trace.db
+qa-agent eval --version v0.2
+```
+
+Requires an explicit `--trace-db`. Missing evidence terminates as `INSUFFICIENT_EVIDENCE`.
+
+### v0.3 test engineering
+
+```bash
+qa-agent engineer-test \
+  --requirement REQ-ID \
+  --repository . \
+  --trace-db ./trace.db \
+  --generator-file ./candidate.json
+qa-agent eval --version v0.3
+```
+
+Default execution copies the repository into a local temporary worktree, applies test-only patches, and runs pytest there without writing the original tree. Optional hardened isolation: `--execution-backend docker` (requires a local Docker image). Playwright remains detect-only when binaries are unavailable. Patches are never auto-applied or committed.
 
 ## Key documents
 
@@ -83,10 +109,11 @@ The initial implementation runs a bounded deterministic loop (`detect → inspec
 - [Master implementation roadmap](MASTER_IMPLEMENTATION_ROADMAP.md)
 - [Full engineering plan](FULL_ENGINEERING_PLAN.md)
 - [Project contribution rules](AGENTS.md)
+- [Changelog](CHANGELOG.md)
 
 ## Status
 
-This repository includes an executable v0.1 baseline and versioned engineering packs for subsequent releases. The v0.1 baseline is not yet a production release.
+This repository includes executable baselines through v0.3.1. It is not yet a production release.
 
 ## License
 

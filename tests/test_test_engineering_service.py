@@ -55,6 +55,8 @@ def test_service_stops_after_configured_repairs(tmp_path: Path) -> None:
 
     assert result.status.termination_reason == "BUDGET_EXHAUSTED"
     assert len(result.repairs) == 1
+    assert any(item.action_id == "analyze_failure" for item in result.loop_trace)
+    assert "exit code" in result.repairs[0].reason
 
 
 def test_service_preserves_timeout_instead_of_calling_it_budget_exhaustion(tmp_path: Path) -> None:

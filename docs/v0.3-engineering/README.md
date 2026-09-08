@@ -15,9 +15,17 @@ Test Engineer + Quality Reviewer + Quality Analyst
 ## 版本循环
 `Test intent → generate → parse → compile → execute → review → analyze failure → repair → retry → accept/reject`
 
+## 执行契约（0.3.1）
+
+- **默认**：本地临时目录副本 + `python -m pytest`；原仓库只读、不落盘生成补丁。
+- **可选**：`--execution-backend docker` 使用 `containers/pytest` 镜像做无网络/只读挂载加固隔离。
+- Playwright 在二进制不可用时返回结构化 `INSUFFICIENT_EVIDENCE`，不下载依赖。
+- 补丁仅限测试路径；禁止自动应用、自动提交、自动合并。
+
 ## 验证入口
 
-`qa-agent engineer-test --requirement ... --repository ... --trace-db ... --generator-file ...` 只读取本地受限 JSON fixture，并在临时副本执行测试。运行 `qa-agent eval --version v0.3` 验证安全生成、失败候选和不安全路径拒绝。
+`qa-agent engineer-test --requirement ... --repository ... --trace-db ... --generator-file ... [--framework pytest|playwright] [--execution-backend local|docker]`
+只读取本地受限 JSON fixture。运行 `qa-agent eval --version v0.3` 验证安全生成、失败候选和不安全路径拒绝。
 
 ## 非目标
 
