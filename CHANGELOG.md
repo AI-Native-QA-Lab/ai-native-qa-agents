@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.1 - 2026-09-08
+
+### Fixes
+
+- Restore the approved default local temp-directory pytest sandbox; Docker isolation is optional via `--execution-backend docker`.
+- Resolve the pytest runner against the current interpreter first, then fall back to `PATH`, so CLI evals work across Homebrew Python layouts.
+- Complete the v0.3 loop with explicit failure analysis, repair attempts, and a deterministic Reviewer gate after execution.
+- Align root README entries and the v0.3 engineering pack with the implemented local-first execution contract.
+
+### Tests
+
+- Cover local sandbox isolation, optional Docker unavailability, and `analyze_failure` repair traces.
+
 ## 0.3.0 - 2026-09-08
 
 ### Features

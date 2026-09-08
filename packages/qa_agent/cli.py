@@ -62,6 +62,8 @@ def main(argv: list[str] | None = None) -> int:
     engineer.add_argument("--repository", type=Path, required=True)
     engineer.add_argument("--trace-db", type=Path, required=True)
     engineer.add_argument("--generator-file", type=Path, required=True)
+    engineer.add_argument("--framework", choices=("pytest", "playwright"), default="pytest")
+    engineer.add_argument("--execution-backend", choices=("local", "docker"), default="local")
     engineer.add_argument("--format", choices=("human", "json"), default="human")
     args = parser.parse_args(argv)
     service = ReviewService()
@@ -99,14 +101,27 @@ def main(argv: list[str] | None = None) -> int:
         _render_requirement(result, args.format)
         return {"pass": 0, "warn": 0, "fail": 1}.get(result.decision, 2)
     if args.command == "engineer-test":
+        from .execution import DockerPytestExecutionBackend, PlaywrightExecutionBackend, PytestExecutionBackend
+
         store = SQLiteTraceStore(args.trace_db)
         requirement = store.get_requirement(args.requirement)
         evidence = store.get_evidence(args.requirement)
         if requirement is None:
             print(json.dumps({"decision": "incomplete", "termination_reason": "INSUFFICIENT_EVIDENCE"}))
             return 2
-        result = TestEngineeringService(JsonTestGenerator(args.generator_file)).run(
-            TestEngineeringRequest(requirement.id, args.repository, tuple(item.id for item in evidence))
+        if args.framework == "playwright":
+            backend = PlaywrightExecutionBackend()
+        elif args.execution_backend == "docker":
+            backend = DockerPytestExecutionBackend()
+        else:
+            backend = PytestExecutionBackend()
+        result = TestEngineeringService(JsonTestGenerator(args.generator_file), backend).run(
+            TestEngineeringRequest(
+                requirement.id,
+                args.repository,
+                tuple(item.id for item in evidence),
+                framework=args.framework,
+            )
         )
         print(json.dumps(result.to_dict(), indent=2, sort_keys=True) if args.format == "json" else f"Decision: {result.status.decision}\nTermination: {result.status.termination_reason}")
         return 0 if result.status.decision == "accepted" else 2 if result.status.decision == "incomplete" else 1

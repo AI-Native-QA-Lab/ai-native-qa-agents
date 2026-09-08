@@ -3,7 +3,7 @@
 ## Delta
 - Agents: Test Engineer + Quality Reviewer + Quality Analyst
 - Domain: TestIntent, TestPlan, TestScenario, GeneratedPatch, ExecutionResult, RepairAttempt, TestCandidateStatus
-- Adapters/Backends: ExecutionBackend; pytest executor; Playwright executor; TestGenerator; worktree/container sandbox
+- Adapters/Backends: ExecutionBackend; default local pytest worktree; optional Docker pytest; Playwright detector; TestGenerator
 - Evidence/Gates: generated_patch, compile_result, test_execution, repair_attempt; Parse/Compile/Execution/Assertion/Reviewer Gates
 
 ## Runtime
