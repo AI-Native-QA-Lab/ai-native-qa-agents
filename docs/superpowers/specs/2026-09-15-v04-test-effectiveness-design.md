@@ -954,6 +954,9 @@ v0.4 release readiness；本地代码测试通过不等于真实项目、CI、�
 - `packages/qa_agent/model_runtime.py`：复用 provider-neutral runtime，增加或
   透传 v0.4 mapping 所需的 fallback metadata；不新增 provider-specific 业务
   adapter。
+- `packages/qa_agent/benchmark.py`：version-1 real-project manifest 校验、
+  artifact/revision/dirty-tree verification、fixed runner 和按 case 输出
+  precision/recall/FPR/useful/explanation/cost/latency metrics。
 - `packages/qa_agent/evals.py`、`evals/v04/`：v0.4 正例/负例/歧义/对抗评测；
   `evals/test_quality/` 中的 v0.1 资产不混入 v0.4 默认 PR review。
 - `tests/test_effectiveness.py`、`tests/test_effectiveness_service.py`、
@@ -965,6 +968,9 @@ v0.4 release readiness；本地代码测试通过不等于真实项目、CI、�
   `tests/test_model_runtime.py`。
 - `examples/v04-sample/`：包含 requirement、test context、source/tests 和
   mutation report 的可重复 reference workflow。
+- `benchmarks/v04/`：真实项目 manifest、adjudication record schema 和不可写的
+  case-result artifacts；fixture/golden eval 不得冒充该目录中的 real-project
+  evidence。
 - `docs/v0.4-engineering/REAL_PROJECT_VALIDATION.md`：真实项目 benchmark 的
   输入、结果、限制和 evidence 记录格式。
 - `docs/v0.3-engineering/README.md`、`DOMAIN_MODEL.md`：记录向后兼容的语义
