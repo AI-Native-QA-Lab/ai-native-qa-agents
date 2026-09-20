@@ -290,8 +290,13 @@ def validate_case(manifest: BenchmarkManifest) -> BenchmarkValidationResult:
                 )
                 if status.returncode != 0:
                     reasons.append("working tree observation failed")
-                elif status.stdout.strip() and not manifest.allow_dirty:
-                    reasons.append("dirty tree requires allow_dirty")
+                elif status.stdout.strip():
+                    if manifest.working_tree.status != "dirty":
+                        reasons.append("working tree status mismatch")
+                    if not manifest.allow_dirty:
+                        reasons.append("dirty tree requires allow_dirty")
+                elif manifest.working_tree.status == "dirty":
+                    reasons.append("working tree status mismatch")
             if manifest.working_tree.status == "dirty" and manifest.working_tree.snapshot_hash != current_snapshot:
                 reasons.append("working tree snapshot mismatch")
             if manifest.working_tree.status == "clean" and manifest.working_tree.snapshot_hash and manifest.working_tree.snapshot_hash != current_snapshot:
@@ -392,7 +397,7 @@ def run_case(manifest: BenchmarkManifest) -> BenchmarkCaseResult:
         return BenchmarkCaseResult(manifest.case_id, "incomplete", "INSUFFICIENT_EVIDENCE", manifest.adjudication.get("status", "unresolved"), validation.reasons)
     try:
         values, _ = _parse_fixed_argv(manifest)
-        repository_arg = Path(values.get("--repository", str(manifest.repository))).resolve()
+        repository_arg = _artifact_path(manifest.manifest_dir, values.get("--repository", str(manifest.repository)))
         if repository_arg != manifest.repository:
             raise ValueError("argv repository does not match manifest repository")
         context_artifact = manifest.artifacts["test_context"]
