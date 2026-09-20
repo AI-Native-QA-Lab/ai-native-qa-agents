@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-native-qa-lab.github.io/ai-native-qa-agents/benchmarks/v04/manifest.schema.json",
+  "title": "AI Native QA Agents v0.4 benchmark manifest",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "case_id",
+    "repository",
+    "framework",
+    "artifacts",
+    "argv",
+    "allow_dirty",
+    "working_tree",
+    "ground_truth",
+    "adjudication"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "case_id": {"type": "string", "minLength": 1},
+    "repository": {
+      "type": "object",
+      "required": ["path", "revision"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "framework": {"type": "string", "minLength": 1},
+    "artifacts": {
+      "type": "object",
+      "required": ["requirement", "test_context", "mutation_report"],
+      "properties": {
+        "requirement": {"$ref": "#/$defs/artifact"},
+        "test_context": {"$ref": "#/$defs/artifact"},
+        "mutation_report": {"$ref": "#/$defs/artifact"}
+      },
+      "additionalProperties": false
+    },
+    "argv": {
+      "type": "array",
+      "minItems": 2,
+      "items": {"type": "string"}
+    },
+    "allow_dirty": {"type": "boolean"},
+    "working_tree": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["clean", "dirty"]},
+        "snapshot_hash": {"type": ["string", "null"]},
+        "reason": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "ground_truth": {
+      "type": "object",
+      "required": ["survivor_labels", "signal_labels"],
+      "properties": {
+        "survivor_labels": {"type": "array", "items": {"$ref": "#/$defs/survivorLabel"}},
+        "signal_labels": {"type": "array", "items": {"type": "object"}}
+      },
+      "additionalProperties": false
+    },
+    "adjudication": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["resolved", "unresolved", "not_applicable"]},
+        "record": {"$ref": "#/$defs/artifact"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"pattern": "^sha256:[0-9a-fA-F]{64}$", "type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "survivorLabel": {
+      "type": "object",
+      "required": ["object_id", "expected_outcome", "expected_classification", "evidence_ref", "reviewer_decision"],
+      "properties": {
+        "object_id": {"type": "string", "minLength": 1},
+        "expected_outcome": {"type": "string", "minLength": 1},
+        "expected_classification": {"type": "string", "minLength": 1},
+        "evidence_ref": {"type": "string", "minLength": 1},
+        "reviewer_decision": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
