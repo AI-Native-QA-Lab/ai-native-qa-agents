@@ -221,6 +221,8 @@ class OfflineMutationReportAdapter:
             tuple(results),
             tuple(evidence),
             raw_hash,
+            target_paths,
+            selected_test_ids,
         )
 
 

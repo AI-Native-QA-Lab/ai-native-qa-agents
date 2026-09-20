@@ -25,9 +25,7 @@ from .effectiveness import (
 from .mutation_adapters import OfflineMutationReportAdapter
 from .mutation_backends import (
     MutationBackend,
-    MutationBackendResult,
     MutationConfigurationError,
-    MutationError,
     MutationExecutionError,
     MutationInputError,
     MutationRequest,
@@ -59,6 +57,7 @@ MODEL_LINK_KEYS = (
     "rationale",
 )
 MODEL_LINK_KEY_SET = set(MODEL_LINK_KEYS)
+MAX_MODEL_TEXT_BYTES = 4096
 
 
 def validate_model_mapping(
@@ -87,11 +86,13 @@ def validate_model_mapping(
         for key in MODEL_LINK_KEYS:
             value = raw_link.get(key)
             if key == "rationale":
-                if not isinstance(value, str) or not value.strip():
+                if not isinstance(value, str) or not value.strip() or len(value.encode("utf-8")) > MAX_MODEL_TEXT_BYTES:
                     return []
                 normalized[key] = value.strip()
                 continue
             if value is not None and (not isinstance(value, str) or not value.strip()):
+                return []
+            if isinstance(value, str) and len(value.encode("utf-8")) > MAX_MODEL_TEXT_BYTES:
                 return []
             normalized[key] = value.strip() if isinstance(value, str) else None
 
@@ -301,9 +302,11 @@ class TestEffectivenessService:
         if not record_phase("OBSERVE", evidence_ids=tuple(item.id for item in provider_evidence)):
             return self._finish(request, assessment_id, context_valid, None, score_results((), ()), (), (), traces, agent_evidence, provider_evidence, "BUDGET_EXHAUSTED")
         if request.mutation_report is not None:
-            report_target_paths = tuple(item.path for item in provider_result.mutants)
-            report_targets = {item for item in report_target_paths if item}
-            if not report_targets <= set(request.context.target_paths) or not set(request.context.test_ids) >= {test_id for result in provider_result.results for test_id in result.executed_test_ids}:
+            report_target_paths = set(provider_result.target_paths) or {item.path for item in provider_result.mutants}
+            report_test_ids = set(provider_result.selected_test_ids) or {
+                test_id for result in provider_result.results for test_id in result.executed_test_ids
+            }
+            if not report_target_paths <= set(request.context.target_paths) or not report_test_ids <= set(request.context.test_ids):
                 return self._finish(request, assessment_id, context_valid, None, score_results((), ()), (), (), traces, agent_evidence, provider_evidence, "INSUFFICIENT_EVIDENCE")
         run_id = "RUN-" + artifact_hash({"assessment_id": assessment_id, "report": provider_result.raw_report_hash or "backend"})[7:23]
         run = MutationRun(
@@ -322,7 +325,7 @@ class TestEffectivenessService:
         result_values = tuple(replace(item, run_id=run_id) for item in provider_result.results)
         if not record_phase("MAP", evidence_ids=tuple(item.id for item in provider_evidence)):
             return self._finish(request, assessment_id, context_valid, run, score_results(result_values, tuple(item.id for item in provider_evidence)), (), (), traces, agent_evidence, provider_evidence, "BUDGET_EXHAUSTED")
-        survivor_links = self._map_survivors(request.context, run, result_values)
+        survivor_links = self._map_survivors(request.context, run, result_values, provider_evidence)
         survivor_links, model_calls = self._apply_optional_model_mapping(
             request,
             assessment_id,
@@ -429,9 +432,16 @@ class TestEffectivenessService:
             self.store.save_assessment(assessment)
         return assessment
 
-    def _map_survivors(self, context: TestEffectivenessContext, run: MutationRun, results: tuple[MutationResult, ...]) -> tuple[MutationTraceLink, ...]:
+    def _map_survivors(
+        self,
+        context: TestEffectivenessContext,
+        run: MutationRun,
+        results: tuple[MutationResult, ...],
+        provider_evidence: tuple[Evidence, ...] = (),
+    ) -> tuple[MutationTraceLink, ...]:
         intent_by_id = {item.id: item for item in context.intents}
         evidence_by_id = {item.id: item for item in context.evidence}
+        evidence_by_id.update({item.id: item for item in provider_evidence})
         links: list[MutationTraceLink] = []
         for result in results:
             if result.outcome != "survived":
@@ -447,7 +457,11 @@ class TestEffectivenessService:
             verified = bool(
                 scenario.business_oracle
                 and intent.business_oracle
-                and all(evidence_by_id.get(identifier, None) is not None and evidence_by_id[identifier].status == "verified" for identifier in evidence_ids if identifier in evidence_by_id)
+                and all(
+                    evidence_by_id.get(identifier) is not None
+                    and evidence_by_id[identifier].status == "verified"
+                    for identifier in evidence_ids
+                )
             )
             links.append(MutationTraceLink(run.run_id, result.mutant_id, context.requirement_id, intent.id, scenario.id, scenario.business_oracle or intent.business_oracle, "verified" if verified else "unverified", evidence_ids))
         return tuple(links)

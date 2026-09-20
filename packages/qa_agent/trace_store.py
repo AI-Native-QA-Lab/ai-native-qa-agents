@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 import sqlite3
@@ -379,8 +380,23 @@ class SQLiteTraceStore:
                     _json(budget_to_dict(assessment.budget, include_v04=True)),
                 ),
             )
+            connection.execute("DELETE FROM observations WHERE assessment_id = ?", (assessment.assessment_id,))
             connection.execute("DELETE FROM loop_traces WHERE assessment_id = ?", (assessment.assessment_id,))
             for item in assessment.loop_trace:
+                if item.observation_id is not None:
+                    connection.execute(
+                        "INSERT INTO observations VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            item.observation_id,
+                            assessment.assessment_id,
+                            item.action_id,
+                            item.phase or item.action_id,
+                            f"{item.phase or item.action_id} {item.status}",
+                            _json({"iteration": item.iteration, "status": item.status, "termination_reason": item.termination_reason}),
+                            _json(item.evidence_ids),
+                            datetime.now(timezone.utc).isoformat(),
+                        ),
+                    )
                 connection.execute(
                     "INSERT INTO loop_traces VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (

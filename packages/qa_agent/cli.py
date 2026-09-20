@@ -187,6 +187,9 @@ def _run_assess_effectiveness(args, parser: argparse.ArgumentParser) -> int:
     except (OSError, ValueError, RuntimeError) as exc:
         _render_effectiveness_missing(_effectiveness_incomplete([], invalid_inputs=[str(exc)]), args.format)
         return 2
+    except Exception as exc:
+        _render_effectiveness_missing(_effectiveness_incomplete([], invalid_inputs=[f"internal error: {exc}"]), args.format)
+        return 3
 
 
 def main(argv: list[str] | None = None) -> int:

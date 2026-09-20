@@ -49,6 +49,8 @@ def test_offline_parser_normalizes_valid_report(tmp_path) -> None:
     assert result.observation_status == "complete"
     assert result.process_status == "completed"
     assert result.raw_report_hash.startswith("sha256:")
+    assert result.target_paths == ("src/cart.py",)
+    assert result.selected_test_ids == ("tests/test_cart.py::test_declined",)
 
 
 def test_prompt_data_is_never_executed(tmp_path) -> None:

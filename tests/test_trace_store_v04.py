@@ -71,3 +71,23 @@ def test_v04_rejects_newer_schema_without_overwriting(tmp_path) -> None:
         connection.execute("pragma user_version = 99")
     with pytest.raises(RuntimeError):
         SQLiteTraceStore(database)
+
+
+def test_v04_service_persists_one_observation_for_each_loop_trace(tmp_path, valid_context, valid_report, monkeypatch) -> None:
+    import qa_agent.effectiveness_service as effectiveness_service
+    from qa_agent.effectiveness_service import TestEffectivenessRequest, TestEffectivenessService
+    from qa_agent.runtime import ExecutionBudget
+    from qa_agent.trace_store import SQLiteTraceStore
+
+    monkeypatch.setattr(effectiveness_service, "resolve_repository_revision", lambda _: "REV-1")
+    store = SQLiteTraceStore(tmp_path / "trace.db")
+    assessment = TestEffectivenessService(store).assess(
+        TestEffectivenessRequest("REQ-1", tmp_path, valid_context, valid_report, None, 0.8, ExecutionBudget.v04_defaults())
+    )
+
+    with store._connect() as connection:
+        observed = connection.execute(
+            "select count(*) from observations where assessment_id = ?",
+            (assessment.assessment_id,),
+        ).fetchone()[0]
+    assert observed == len(assessment.loop_trace)

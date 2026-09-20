@@ -98,3 +98,34 @@ def test_invalid_execution_evidence_does_not_pass(tmp_path, valid_context, valid
     assessment = TestEffectivenessService().assess(TestEffectivenessRequest("REQ-1", tmp_path, invalid_context, valid_report, None, 0.8, ExecutionBudget.v04_defaults()))
     assert assessment.decision == "incomplete"
     assert assessment.termination_reason == "INSUFFICIENT_EVIDENCE"
+
+
+def test_unverified_mutation_evidence_does_not_create_verified_mapping(tmp_path, valid_context, valid_report, monkeypatch) -> None:
+    import qa_agent.effectiveness_service as effectiveness_service
+    from qa_agent.mutation_adapters import OfflineMutationReportAdapter
+    from qa_agent.mutation_backends import MutationBackendResult
+    from qa_agent.effectiveness_service import TestEffectivenessRequest, TestEffectivenessService
+    from qa_agent.runtime import ExecutionBudget
+
+    monkeypatch.setattr(effectiveness_service, "resolve_repository_revision", lambda _: "REV-1")
+    parsed = OfflineMutationReportAdapter().parse(valid_report, "REV-1", ExecutionBudget.v04_defaults())
+    unverified = MutationBackendResult(
+        parsed.backend,
+        parsed.tool_version,
+        parsed.process_status,
+        parsed.observation_status,
+        parsed.mutants,
+        parsed.results,
+        tuple(replace(item, status="unverified") for item in parsed.evidence),
+        parsed.raw_report_hash,
+        parsed.target_paths,
+        parsed.selected_test_ids,
+    )
+    monkeypatch.setattr(effectiveness_service.OfflineMutationReportAdapter, "parse", lambda *args: unverified)
+
+    assessment = TestEffectivenessService().assess(
+        TestEffectivenessRequest("REQ-1", tmp_path, valid_context, valid_report, None, 0.8, ExecutionBudget.v04_defaults())
+    )
+
+    assert assessment.survivor_links
+    assert all(link.mapping_status == "unverified" for link in assessment.survivor_links)

@@ -78,6 +78,8 @@ class MutationBackendResult:
     results: tuple[MutationResult, ...]
     evidence: tuple[Evidence, ...]
     raw_report_hash: str | None
+    target_paths: tuple[str, ...] = ()
+    selected_test_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.backend.strip():
