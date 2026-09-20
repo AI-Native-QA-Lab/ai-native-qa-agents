@@ -39,3 +39,18 @@ Mutation、自治生产代码修复、无人值守写入。
 - New adapters have contract tests.
 - Eval set contains positive, negative, ambiguous and adversarial cases.
 - Security boundaries are enforced outside prompts.
+
+## v0.4 compatibility boundary
+
+v0.4 extends this contract rather than silently changing it. The existing
+positional `TestIntent`, `TestScenario`, and `TestEngineeringRequest` fields and
+the v0.3 wire schema remain valid; new acceptance-criterion, risk, observable
+behavior, and Business Oracle fields are appended as optional values. Legacy
+serializers omit empty v0.4-only fields and generated-candidate behavior remains
+unchanged when the new semantics are absent.
+
+An explicit `import_v03` path may read a v0.3 context and mark it as
+`source_version=v0.3`/legacy semantics. v0.4 never silently upgrades that input,
+and the phrase `test passes` is not a Business Oracle. A v0.4 effectiveness run
+with missing Oracle or required Evidence fails closed as `incomplete` with
+`INSUFFICIENT_EVIDENCE` before Mutation execution.
