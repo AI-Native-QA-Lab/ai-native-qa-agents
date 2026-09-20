@@ -129,3 +129,4 @@ def test_unverified_mutation_evidence_does_not_create_verified_mapping(tmp_path,
 
     assert assessment.survivor_links
     assert all(link.mapping_status == "unverified" for link in assessment.survivor_links)
+    assert assessment.termination_reason == "INSUFFICIENT_EVIDENCE"

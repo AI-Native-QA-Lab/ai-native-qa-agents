@@ -347,7 +347,8 @@ class TestEffectivenessService:
         verified_inputs = bool(execution_evidence and assertion_evidence) and all(
             item.status == "verified" for item in (*execution_evidence, *assertion_evidence)
         )
-        termination_reason = "EVIDENCE_SUFFICIENT" if provider_result.observation_status == "complete" and provider_result.process_status in {"completed", "partial"} and verified_inputs else "INSUFFICIENT_EVIDENCE"
+        verified_provider_evidence = bool(provider_evidence) and all(item.status == "verified" for item in provider_evidence)
+        termination_reason = "EVIDENCE_SUFFICIENT" if provider_result.observation_status == "complete" and provider_result.process_status in {"completed", "partial"} and verified_inputs and verified_provider_evidence else "INSUFFICIENT_EVIDENCE"
         if not record_phase("GATE", evidence_ids=_unique_ids(tuple(item.id for item in request.context.evidence), tuple(item.id for item in provider_evidence))):
             termination_reason = "BUDGET_EXHAUSTED"
         return self._finish(
