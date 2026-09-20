@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "backend": "offline",
+  "repository_revision": "REV-1",
+  "observation_status": "partial",
+  "target_paths": ["src/cart.py"],
+  "selected_test_ids": ["tests/test_cart.py::test_declined"],
+  "mutants": [
+    {
+      "id": "M-1",
+      "path": "src/cart.py",
+      "line": 12,
+      "operator": "replace-constant",
+      "original": "False",
+      "mutated": "True",
+      "outcome": "killed",
+      "executed_test_ids": ["tests/test_cart.py::test_declined"],
+      "killing_test_ids": ["tests/test_cart.py::test_declined"],
+      "duration_ms": 1,
+      "stdout_hash": null,
+      "stderr_hash": null
+    },
+    {
+      "id": "M-2",
+      "path": "src/cart.py",
+      "line": 13,
+      "operator": "replace-constant",
+      "original": "True",
+      "mutated": "False",
+      "outcome": "not_run",
+      "executed_test_ids": [],
+      "killing_test_ids": [],
+      "duration_ms": 0,
+      "stdout_hash": null,
+      "stderr_hash": null
+    }
+  ]
+}
