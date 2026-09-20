@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 import hashlib
+import json
 import subprocess
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from .effectiveness import (
     FakeTestSignal,
@@ -36,6 +37,7 @@ from .mutation_backends import (
 from .review import Evidence
 from .runtime import ExecutionBudget, LoopTrace, PermissionContext, PermissionResult
 from .trace_store import SQLiteTraceStore
+from .model_runtime import ModelResponse
 
 
 TERMINATION_REASONS = {
@@ -46,6 +48,63 @@ TERMINATION_REASONS = {
     "HUMAN_APPROVAL_REQUIRED",
     "ERROR",
 }
+
+MODEL_TASK_TYPE = "effectiveness-survivor-mapping"
+MODEL_LINK_KEYS = (
+    "mutant_id",
+    "requirement_id",
+    "intent_id",
+    "scenario_id",
+    "oracle",
+    "rationale",
+)
+MODEL_LINK_KEY_SET = set(MODEL_LINK_KEYS)
+
+
+def validate_model_mapping(
+    payload: dict[str, Any], known_ids: dict[str, set[str]]
+) -> list[dict[str, str | None]]:
+    """Accept only the bounded, exact survivor-link response shape."""
+
+    if not isinstance(payload, dict) or set(payload) != {"links"}:
+        return []
+    raw_links = payload.get("links")
+    if not isinstance(raw_links, list):
+        return []
+
+    id_fields = {
+        "mutant_id": "mutant_ids",
+        "requirement_id": "requirement_ids",
+        "intent_id": "intent_ids",
+        "scenario_id": "scenario_ids",
+    }
+    accepted: list[dict[str, str | None]] = []
+    seen_mutants: set[str] = set()
+    for raw_link in raw_links:
+        if not isinstance(raw_link, dict) or set(raw_link) != MODEL_LINK_KEY_SET:
+            return []
+        normalized: dict[str, str | None] = {}
+        for key in MODEL_LINK_KEYS:
+            value = raw_link.get(key)
+            if key == "rationale":
+                if not isinstance(value, str) or not value.strip():
+                    return []
+                normalized[key] = value.strip()
+                continue
+            if value is not None and (not isinstance(value, str) or not value.strip()):
+                return []
+            normalized[key] = value.strip() if isinstance(value, str) else None
+
+        mutant_id = normalized["mutant_id"]
+        if mutant_id is None or mutant_id in seen_mutants:
+            return []
+        seen_mutants.add(mutant_id)
+        for field_name, id_group in id_fields.items():
+            value = normalized[field_name]
+            if value is not None and value not in known_ids.get(id_group, set()):
+                return []
+        accepted.append(normalized)
+    return accepted
 
 
 @dataclass(frozen=True)
@@ -135,6 +194,7 @@ class TestEffectivenessService:
         survivor_links: tuple[MutationTraceLink, ...] = ()
         signals: tuple[FakeTestSignal, ...] = ()
         provider_evidence: tuple[Evidence, ...] = ()
+        model_calls = 0
         termination_reason = "INSUFFICIENT_EVIDENCE"
 
         def record_phase(
@@ -263,6 +323,16 @@ class TestEffectivenessService:
         if not record_phase("MAP", evidence_ids=tuple(item.id for item in provider_evidence)):
             return self._finish(request, assessment_id, context_valid, run, score_results(result_values, tuple(item.id for item in provider_evidence)), (), (), traces, agent_evidence, provider_evidence, "BUDGET_EXHAUSTED")
         survivor_links = self._map_survivors(request.context, run, result_values)
+        survivor_links, model_calls = self._apply_optional_model_mapping(
+            request,
+            assessment_id,
+            run,
+            result_values,
+            survivor_links,
+            agent_evidence,
+            traces,
+            model_calls,
+        )
         signals = self._signals(request.context, survivor_links)
         if not record_phase("EVALUATE", evidence_ids=tuple(item.id for item in provider_evidence)):
             return self._finish(request, assessment_id, context_valid, run, score_results(result_values, tuple(item.id for item in provider_evidence)), survivor_links, signals, traces, agent_evidence, provider_evidence, "BUDGET_EXHAUSTED")
@@ -391,9 +461,147 @@ class TestEffectivenessService:
             signals.append(FakeTestSignal("SIG-SURVIVOR-" + link.mutant_id, "mutation_survivor", "medium", "Mutation survivor requires effectiveness review", "deterministic-mutation", "verified" if link.mapping_status == "verified" else "unverified", link.evidence_ids))
         return tuple(signals)
 
+    def _apply_optional_model_mapping(
+        self,
+        request: TestEffectivenessRequest,
+        assessment_id: str,
+        run: MutationRun,
+        results: tuple[MutationResult, ...],
+        deterministic_links: tuple[MutationTraceLink, ...],
+        agent_evidence: list[Evidence],
+        traces: list[LoopTrace],
+        model_calls: int,
+    ) -> tuple[tuple[MutationTraceLink, ...], int]:
+        """Use one explicitly injected mapper without changing runtime truth."""
 
-class SurvivorMappingProvider:
-    """Forward-compatible protocol placeholder; Task 9 adds model validation."""
+        if self.model_mapper is None or model_calls >= request.budget.max_model_calls:
+            return deterministic_links, model_calls
+        survivor_ids = tuple(
+            link.mutant_id
+            for link in deterministic_links
+            if link.mapping_status == "unmapped"
+        )
+        if not survivor_ids:
+            return deterministic_links, model_calls
+        try:
+            bounded_context = self._bounded_model_context(request.context, survivor_ids, request.budget)
+            permission = PermissionResult(
+                "MODEL_SURVIVOR_MAPPING",
+                True,
+                "explicit optional survivor mapping is allowed",
+                f"EV-PERM-{assessment_id}-MODEL",
+                False,
+            )
+            agent_evidence.append(
+                _agent_evidence(
+                    permission.evidence_id or "EV-PERM-MODEL",
+                    "permission:MODEL_SURVIVOR_MAPPING",
+                    permission.reason,
+                    len(traces),
+                )
+            )
+            response = self.model_mapper.map(bounded_context, survivor_ids)
+            model_calls += 1
+            if not isinstance(response, ModelResponse) or not isinstance(response.structured_output, dict):
+                return deterministic_links, model_calls
+            known_ids = {
+                "mutant_ids": set(survivor_ids),
+                "requirement_ids": {request.context.requirement_id},
+                "intent_ids": {item.id for item in request.context.intents},
+                "scenario_ids": {item.id for item in request.context.scenarios},
+            }
+            mappings = validate_model_mapping(response.structured_output, known_ids)
+            if not mappings:
+                return deterministic_links, model_calls
+            return self._merge_model_links(deterministic_links, results, run, mappings), model_calls
+        except Exception:
+            model_calls += 1
+            return deterministic_links, model_calls
 
-    def map(self, context: dict[str, Any], survivor_ids: tuple[str, ...]):  # pragma: no cover - protocol is added in Task 9
-        raise NotImplementedError
+    def _bounded_model_context(
+        self,
+        context: TestEffectivenessContext,
+        survivor_ids: tuple[str, ...],
+        budget: ExecutionBudget,
+    ) -> dict[str, Any]:
+        def bounded(value: str | None, limit: int = 512) -> str | None:
+            if value is None:
+                return None
+            return value[:limit]
+
+        payload: dict[str, Any] = {
+            "task_type": MODEL_TASK_TYPE,
+            "requirement_id": context.requirement_id,
+            "survivor_ids": list(survivor_ids),
+            "intents": [
+                {
+                    "id": item.id,
+                    "requirement_id": item.requirement_id,
+                    "observable_behavior": bounded(item.observable_behavior),
+                    "business_oracle": bounded(item.business_oracle),
+                }
+                for item in context.intents
+            ],
+            "scenarios": [
+                {
+                    "id": item.id,
+                    "intent_id": item.intent_id,
+                    "test_ids": list(item.test_ids),
+                    "business_oracle": bounded(item.business_oracle),
+                }
+                for item in context.scenarios
+            ],
+            "evidence": [
+                {
+                    "id": item.id,
+                    "status": item.status,
+                    "redacted_excerpt": bounded(item.redacted_excerpt),
+                }
+                for item in context.evidence
+                if item.redacted_excerpt is not None
+            ],
+        }
+        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        if budget.max_context_bytes is None or len(encoded) > budget.max_context_bytes:
+            raise ValueError("bounded model context exceeds max_context_bytes")
+        return payload
+
+    def _merge_model_links(
+        self,
+        deterministic_links: tuple[MutationTraceLink, ...],
+        results: tuple[MutationResult, ...],
+        run: MutationRun,
+        mappings: list[dict[str, str | None]],
+    ) -> tuple[MutationTraceLink, ...]:
+        result_by_mutant = {item.mutant_id: item for item in results}
+        mapping_by_mutant = {item["mutant_id"]: item for item in mappings if item["mutant_id"]}
+        merged: list[MutationTraceLink] = []
+        for link in deterministic_links:
+            mapping = mapping_by_mutant.get(link.mutant_id)
+            if link.mapping_status != "unmapped" or mapping is None:
+                merged.append(link)
+                continue
+            result = result_by_mutant.get(link.mutant_id)
+            evidence_ids = _unique_ids(
+                link.evidence_ids,
+                result.evidence_ids if result is not None else (),
+                run.evidence_ids,
+            )
+            merged.append(
+                MutationTraceLink(
+                    run.run_id,
+                    link.mutant_id,
+                    mapping["requirement_id"],
+                    mapping["intent_id"],
+                    mapping["scenario_id"],
+                    mapping["oracle"],
+                    "unverified",
+                    evidence_ids,
+                )
+            )
+        return tuple(merged)
+
+
+@runtime_checkable
+class SurvivorMappingProvider(Protocol):
+    def map(self, context: dict[str, Any], survivor_ids: tuple[str, ...]) -> ModelResponse: ...
