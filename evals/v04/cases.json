@@ -1,0 +1,14 @@
+[
+  {"id": "valid-pass", "expected_decision": "pass"},
+  {"id": "partial-warning", "expected_decision": "warn"},
+  {"id": "low-score-failure", "expected_decision": "fail"},
+  {"id": "missing-oracle", "expected_decision": "incomplete"},
+  {"id": "unmapped-survivor", "expected_decision": "warn"},
+  {"id": "bad-revision", "expected_decision": "incomplete"},
+  {"id": "duplicate-id", "expected_decision": "incomplete"},
+  {"id": "path-escape", "expected_decision": "incomplete"},
+  {"id": "prompt-in-data", "expected_decision": "pass"},
+  {"id": "permission-denial", "expected_decision": "incomplete"},
+  {"id": "budget-exhaustion", "expected_decision": "incomplete"},
+  {"id": "unavailable-backend", "expected_decision": "incomplete"}
+]
