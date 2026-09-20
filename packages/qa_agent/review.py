@@ -16,7 +16,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from .runtime import AgentState, ExecutionBudget, LoopTrace, Observation, TerminationPolicy
+from .runtime import AgentState, ExecutionBudget, LoopTrace, Observation, TerminationPolicy, budget_to_dict, loop_trace_to_dict
 from .runtime_services import ActionExecutor, Evaluator, EvidenceVerifier, Observer, ReviewPlanner
 from .adapters import default_registry
 from .context import build_semantic_context
@@ -143,8 +143,8 @@ class ReviewResult:
             "created_at": self.created_at,
             "gate": asdict(self.gate) if self.gate else None,
             "observations": self.observations,
-            "loop_trace": [asdict(item) for item in self.loop_trace],
-            "budget": asdict(self.budget),
+            "loop_trace": [loop_trace_to_dict(item) for item in self.loop_trace],
+            "budget": budget_to_dict(self.budget),
         }
 
     def to_json(self) -> str:

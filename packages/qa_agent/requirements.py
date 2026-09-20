@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from .review import Evidence, GateResult
-from .runtime import ExecutionBudget, LoopTrace
+from .runtime import ExecutionBudget, LoopTrace, budget_to_dict, loop_trace_to_dict
 
 
 def _required(value: str, name: str) -> None:
@@ -144,6 +144,6 @@ class RequirementResult:
             "decision": self.decision,
             "termination_reason": self.termination_reason,
             "gate": asdict(self.gate) if self.gate else None,
-            "loop_trace": [asdict(item) for item in self.loop_trace],
-            "budget": asdict(self.budget),
+            "loop_trace": [loop_trace_to_dict(item) for item in self.loop_trace],
+            "budget": budget_to_dict(self.budget),
         }

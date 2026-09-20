@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from .runtime import ExecutionBudget, LoopTrace
+from .runtime import ExecutionBudget, LoopTrace, budget_to_dict, loop_trace_to_dict
 
 
 def _required(value: str, name: str) -> None:
@@ -165,8 +165,8 @@ class TestEngineeringResult:
             "status": asdict(self.status) if self.status else None,
             "gates": self.gates,
             "evidence_ids": list(self.evidence_ids),
-            "loop_trace": [asdict(item) for item in self.loop_trace],
-            "budget": asdict(self.budget),
+            "loop_trace": [loop_trace_to_dict(item) for item in self.loop_trace],
+            "budget": budget_to_dict(self.budget),
         }
 
 
