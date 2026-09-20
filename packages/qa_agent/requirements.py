@@ -140,7 +140,7 @@ class RequirementResult:
             "findings": [asdict(item) for item in self.findings],
             "risks": [asdict(item) for item in self.risks],
             "trace_links": [asdict(item) for item in self.trace_links],
-            "evidence": [asdict(item) for item in self.evidence],
+            "evidence": [item.to_dict() for item in self.evidence],
             "decision": self.decision,
             "termination_reason": self.termination_reason,
             "gate": asdict(self.gate) if self.gate else None,

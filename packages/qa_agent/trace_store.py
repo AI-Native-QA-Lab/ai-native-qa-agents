@@ -24,7 +24,7 @@ class SQLiteTraceStore:
 
     def save_requirement(self, requirement: Requirement, evidence: list[Evidence]) -> None:
         with self._connect() as connection:
-            connection.execute("INSERT OR REPLACE INTO requirements VALUES (?, ?, ?, ?, ?, ?, ?)", (requirement.id, requirement.title, requirement.body, requirement.source_kind, requirement.source_ref, json.dumps([asdict(x) for x in requirement.acceptance_criteria]), json.dumps([asdict(x) for x in evidence])))
+            connection.execute("INSERT OR REPLACE INTO requirements VALUES (?, ?, ?, ?, ?, ?, ?)", (requirement.id, requirement.title, requirement.body, requirement.source_kind, requirement.source_ref, json.dumps([asdict(x) for x in requirement.acceptance_criteria]), json.dumps([item.to_dict() for item in evidence])))
 
     def get_requirement(self, identifier: str) -> Requirement | None:
         with self._connect() as connection:
