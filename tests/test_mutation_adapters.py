@@ -152,6 +152,7 @@ def test_mutmut_backend_normalizes_completed_run_without_precreated_copy(monkeyp
     monkeypatch.setattr(mutation_adapters.shutil, "which", lambda name: "/usr/local/bin/mutmut")
 
     def fake_run(argv, cwd, **kwargs):
+        assert argv[1] in {"run", "tests-for-mutant"}
         if argv[1] == "run":
             meta_path = Path(cwd) / "mutants" / "src" / "cart.py.meta"
             meta_path.parent.mkdir(parents=True)
@@ -174,7 +175,6 @@ def test_mutmut_backend_normalizes_completed_run_without_precreated_copy(monkeyp
                 encoding="utf-8",
             )
             return SimpleNamespace(returncode=0, stdout="mutmut completed\n", stderr="")
-        assert argv[1] == "tests-for-mutant"
         return SimpleNamespace(returncode=0, stdout=selected_test + "\n", stderr="")
 
     monkeypatch.setattr(mutation_adapters.subprocess, "run", fake_run)
