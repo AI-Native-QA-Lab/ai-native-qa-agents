@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.0 - 2026-09-21
+
+### Features
+
+- Add the bounded Test Effectiveness & Mutation workflow with versioned context, mutation evidence, effectiveness scoring, gates, trace persistence, and termination records.
+- Add deterministic mutation report handling plus contract adapters for mutmut, PIT, and Stryker, with controlled execution boundaries and capability evidence.
+- Add the v0.4 CLI, evaluation set, reference example, and reproducible real-project benchmark harness.
+
+### Fixes
+
+- Close provenance, report-validation, permission, timeout, working-tree, and review gaps so incomplete evidence fails closed.
+- Preserve v0.3 compatibility while extending the runtime and trace store with additive v0.4 contracts.
+
+### Tests
+
+- Add v0.4 domain, runtime, adapter, service, persistence, CLI, benchmark, documentation, compatibility, and adversarial coverage; the full suite passes with 149 tests.
+
+### Documentation
+
+- Add and synchronize the v0.4 engineering pack, implementation plan, security boundaries, benchmark evidence rules, and bilingual project entry documentation.
+
 ## 0.3.1 - 2026-09-08
 
 ### Fixes
