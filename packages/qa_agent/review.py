@@ -16,7 +16,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from .runtime import AgentState, ExecutionBudget, LoopTrace, Observation, TerminationPolicy
+from .runtime import AgentState, ExecutionBudget, LoopTrace, Observation, TerminationPolicy, budget_to_dict, loop_trace_to_dict
 from .runtime_services import ActionExecutor, Evaluator, EvidenceVerifier, Observer, ReviewPlanner
 from .adapters import default_registry
 from .context import build_semantic_context
@@ -42,6 +42,34 @@ class Evidence:
     extractor: str = "static-rule"
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     loop_iteration: int = 0
+    subject: str | None = None
+    source_ref: str | None = None
+    redacted_excerpt: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self, *, include_empty_extensions: bool = False) -> dict[str, Any]:
+        payload = {
+            "id": self.id,
+            "type": self.type,
+            "path": self.path,
+            "line_start": self.line_start,
+            "line_end": self.line_end,
+            "content_hash": self.content_hash,
+            "status": self.status,
+            "provider": self.provider,
+            "extractor": self.extractor,
+            "created_at": self.created_at,
+            "loop_iteration": self.loop_iteration,
+        }
+        extensions = {
+            "subject": self.subject,
+            "source_ref": self.source_ref,
+            "redacted_excerpt": self.redacted_excerpt,
+            "metadata": self.metadata,
+        }
+        if include_empty_extensions or any(value not in (None, {}) for value in extensions.values()):
+            payload.update(extensions)
+        return payload
 
 
 @dataclass
@@ -104,7 +132,7 @@ class ReviewResult:
         return {
             "schema_version": "1",
             "findings": [asdict(item) for item in self.findings],
-            "evidence": [asdict(item) for item in self.evidence],
+            "evidence": [item.to_dict() for item in self.evidence],
             "languages": self.languages,
             "frameworks": self.frameworks,
             "coverage_gaps": self.coverage_gaps,
@@ -115,8 +143,8 @@ class ReviewResult:
             "created_at": self.created_at,
             "gate": asdict(self.gate) if self.gate else None,
             "observations": self.observations,
-            "loop_trace": [asdict(item) for item in self.loop_trace],
-            "budget": asdict(self.budget),
+            "loop_trace": [loop_trace_to_dict(item) for item in self.loop_trace],
+            "budget": budget_to_dict(self.budget),
         }
 
     def to_json(self) -> str:

@@ -1,0 +1,118 @@
+{
+  "schema_version": "v0.4",
+  "requirement_id": "REQ-CHECKOUT-001",
+  "intents": [
+    {
+      "id": "TI-CHECKOUT-001",
+      "requirement_id": "REQ-CHECKOUT-001",
+      "subject": "declined checkout behavior",
+      "acceptance_criterion_ids": ["AC-CHECKOUT-001"],
+      "risk_ids": [],
+      "observable_behavior": "Declined payment shows an error",
+      "business_oracle": "The checkout response is declined and the error state is visible",
+      "evidence_ids": ["EV-REQ-001", "EV-AC-001"]
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "TS-CHECKOUT-001",
+      "intent_id": "TI-CHECKOUT-001",
+      "name": "declined payment",
+      "steps": ["submit a declined payment"],
+      "expected_outcome": "the error state is visible",
+      "test_ids": ["tests/test_checkout.py::test_declined"],
+      "acceptance_criterion_ids": ["AC-CHECKOUT-001"],
+      "business_oracle": "The error state is asserted",
+      "evidence_ids": ["EV-TEST-001", "EV-AC-001"]
+    }
+  ],
+  "test_ids": ["tests/test_checkout.py::test_declined"],
+  "target_paths": ["src/checkout.py"],
+  "test_paths": ["tests/test_checkout.py"],
+  "execution_evidence_ids": ["EV-EXEC-001"],
+  "assertion_evidence_ids": ["EV-TEST-001"],
+  "evidence_ids": ["EV-REQ-001", "EV-AC-001", "EV-TEST-001", "EV-EXEC-001"],
+  "evidence": [
+    {
+      "id": "EV-REQ-001",
+      "type": "requirement",
+      "subject": "REQ-CHECKOUT-001",
+      "path": "requirement.md",
+      "source_ref": "requirement.md#L1",
+      "line_start": 1,
+      "line_end": 1,
+      "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "status": "verified",
+      "provider": "repository",
+      "extractor": "v0.4-reference",
+      "created_at": "2026-09-15T00:00:00+00:00",
+      "loop_iteration": 0,
+      "redacted_excerpt": null,
+      "metadata": {
+        "redaction": {"applied": false, "policy": "bounded-redacted-v1", "max_bytes": 4096},
+        "limits": {"context_bytes": 1000000, "report_bytes": 2000000}
+      }
+    },
+    {
+      "id": "EV-AC-001",
+      "type": "acceptance_criteria",
+      "subject": "AC-CHECKOUT-001",
+      "path": "requirement.md",
+      "source_ref": "requirement.md#L5",
+      "line_start": 5,
+      "line_end": 5,
+      "content_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "status": "verified",
+      "provider": "repository",
+      "extractor": "v0.4-reference",
+      "created_at": "2026-09-15T00:00:00+00:00",
+      "loop_iteration": 0,
+      "redacted_excerpt": null,
+      "metadata": {
+        "redaction": {"applied": false, "policy": "bounded-redacted-v1", "max_bytes": 4096},
+        "limits": {"context_bytes": 1000000, "report_bytes": 2000000}
+      }
+    },
+    {
+      "id": "EV-TEST-001",
+      "type": "test_assertion",
+      "subject": "tests/test_checkout.py::test_declined",
+      "path": "tests/test_checkout.py",
+      "source_ref": "tests/test_checkout.py#L5",
+      "line_start": 5,
+      "line_end": 5,
+      "content_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "status": "verified",
+      "provider": "pytest",
+      "extractor": "v0.4-reference",
+      "created_at": "2026-09-15T00:00:00+00:00",
+      "loop_iteration": 0,
+      "redacted_excerpt": null,
+      "metadata": {
+        "redaction": {"applied": false, "policy": "bounded-redacted-v1", "max_bytes": 4096},
+        "limits": {"context_bytes": 1000000, "report_bytes": 2000000}
+      }
+    },
+    {
+      "id": "EV-EXEC-001",
+      "type": "test_execution",
+      "subject": "tests/test_checkout.py::test_declined",
+      "path": "tests/test_checkout.py",
+      "source_ref": "tests/test_checkout.py#L5",
+      "line_start": 5,
+      "line_end": 5,
+      "content_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "status": "verified",
+      "provider": "pytest",
+      "extractor": "v0.4-reference",
+      "created_at": "2026-09-15T00:00:00+00:00",
+      "loop_iteration": 0,
+      "redacted_excerpt": null,
+      "metadata": {
+        "redaction": {"applied": false, "policy": "bounded-redacted-v1", "max_bytes": 4096},
+        "limits": {"context_bytes": 1000000, "report_bytes": 2000000}
+      }
+    }
+  ],
+  "artifact_hash": "sha256:148f3ea567900a3c11554f90bc97f749eb2e5154ea8805bb777c8a9b97b6d445"
+}

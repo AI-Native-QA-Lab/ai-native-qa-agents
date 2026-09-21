@@ -13,6 +13,14 @@ class ModelUsage:
 
 
 @dataclass(frozen=True)
+class ModelFallbackMetadata:
+    fallback_used: bool = False
+    requested_provider: str | None = None
+    selected_provider: str | None = None
+    fallback_reason: str | None = None
+
+
+@dataclass(frozen=True)
 class ModelRequest:
     task_type: str
     messages: tuple[dict[str, str], ...] = ()
@@ -30,6 +38,7 @@ class ModelResponse:
     usage: ModelUsage = field(default_factory=ModelUsage)
     latency_ms: int | None = None
     finish_reason: str | None = None
+    fallback: ModelFallbackMetadata = field(default_factory=ModelFallbackMetadata)
 
 
 @dataclass(frozen=True)
@@ -75,7 +84,16 @@ class _CallableProvider:
         started = time.monotonic()
         value = self._invoke(request)
         response = value if isinstance(value, ModelResponse) else ModelResponse(self.provider_name, model, structured_output=value)
-        return ModelResponse(response.provider, response.model, response.content, response.structured_output, response.usage, round((time.monotonic() - started) * 1000), response.finish_reason)
+        return ModelResponse(
+            response.provider,
+            response.model,
+            response.content,
+            response.structured_output,
+            response.usage,
+            round((time.monotonic() - started) * 1000),
+            response.finish_reason,
+            response.fallback,
+        )
 
 
 class OpenAIProvider(_CallableProvider):

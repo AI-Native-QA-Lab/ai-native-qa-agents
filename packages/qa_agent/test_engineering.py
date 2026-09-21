@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from .runtime import ExecutionBudget, LoopTrace
+from .runtime import ExecutionBudget, LoopTrace, budget_to_dict, loop_trace_to_dict
 
 
 def _required(value: str, name: str) -> None:
@@ -19,6 +19,10 @@ class TestIntent:
     requirement_id: str
     subject: str
     evidence_ids: tuple[str, ...]
+    acceptance_criterion_ids: tuple[str, ...] = ()
+    risk_ids: tuple[str, ...] = ()
+    observable_behavior: str | None = None
+    business_oracle: str | None = None
 
     def __post_init__(self) -> None:
         for value, name in ((self.id, "test intent id"), (self.requirement_id, "requirement id"), (self.subject, "test subject")):
@@ -35,6 +39,9 @@ class TestScenario:
     steps: tuple[str, ...]
     expected_outcome: str
     evidence_ids: tuple[str, ...]
+    business_oracle: str | None = None
+    acceptance_criterion_ids: tuple[str, ...] = ()
+    test_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         for value, name in ((self.id, "scenario id"), (self.intent_id, "intent id"), (self.name, "scenario name"), (self.expected_outcome, "expected outcome")):
@@ -147,17 +154,64 @@ class TestEngineeringResult:
     loop_trace: list[LoopTrace] = field(default_factory=list)
     budget: ExecutionBudget = field(default_factory=ExecutionBudget)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, *, include_v04: bool = False) -> dict[str, Any]:
         return {
             "schema_version": "v0.3",
-            "intent": asdict(self.intent) if self.intent else None,
-            "plan": asdict(self.plan) if self.plan else None,
+            "intent": _intent_to_dict(self.intent, include_v04=include_v04) if self.intent else None,
+            "plan": _plan_to_dict(self.plan, include_v04=include_v04) if self.plan else None,
             "patch": asdict(self.patch) if self.patch else None,
             "execution": asdict(self.execution) if self.execution else None,
             "repairs": [asdict(item) for item in self.repairs],
             "status": asdict(self.status) if self.status else None,
             "gates": self.gates,
             "evidence_ids": list(self.evidence_ids),
-            "loop_trace": [asdict(item) for item in self.loop_trace],
-            "budget": asdict(self.budget),
+            "loop_trace": [loop_trace_to_dict(item) for item in self.loop_trace],
+            "budget": budget_to_dict(self.budget),
         }
+
+
+def _intent_to_dict(intent: TestIntent, *, include_v04: bool) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "id": intent.id,
+        "requirement_id": intent.requirement_id,
+        "subject": intent.subject,
+        "evidence_ids": list(intent.evidence_ids),
+    }
+    extensions = {
+        "acceptance_criterion_ids": list(intent.acceptance_criterion_ids),
+        "risk_ids": list(intent.risk_ids),
+        "observable_behavior": intent.observable_behavior,
+        "business_oracle": intent.business_oracle,
+    }
+    if include_v04 or any(value not in (None, []) for value in extensions.values()):
+        payload.update(extensions)
+    return payload
+
+
+def _scenario_to_dict(scenario: TestScenario, *, include_v04: bool) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "id": scenario.id,
+        "intent_id": scenario.intent_id,
+        "name": scenario.name,
+        "steps": list(scenario.steps),
+        "expected_outcome": scenario.expected_outcome,
+        "evidence_ids": list(scenario.evidence_ids),
+    }
+    extensions = {
+        "business_oracle": scenario.business_oracle,
+        "acceptance_criterion_ids": list(scenario.acceptance_criterion_ids),
+        "test_ids": list(scenario.test_ids),
+    }
+    if include_v04 or any(value not in (None, []) for value in extensions.values()):
+        payload.update(extensions)
+    return payload
+
+
+def _plan_to_dict(plan: TestPlan, *, include_v04: bool) -> dict[str, Any]:
+    return {
+        "id": plan.id,
+        "intent_id": plan.intent_id,
+        "framework": plan.framework,
+        "scenarios": [_scenario_to_dict(item, include_v04=include_v04) for item in plan.scenarios],
+        "evidence_ids": list(plan.evidence_ids),
+    }

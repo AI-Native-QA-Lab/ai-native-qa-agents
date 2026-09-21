@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "backend": "offline",
+  "repository_revision": "tree:128fa1518fcf90f6f88cd5d5d7066a4d4b9e04552bdbda493fc17b51df1ad3cc",
+  "observation_status": "complete",
+  "target_paths": ["src/checkout.py"],
+  "selected_test_ids": ["tests/test_checkout.py::test_declined"],
+  "mutants": [
+    {
+      "id": "M-CHECKOUT-001",
+      "path": "src/checkout.py",
+      "line": 5,
+      "operator": "replace-constant",
+      "original": "True",
+      "mutated": "False",
+      "outcome": "killed",
+      "executed_test_ids": ["tests/test_checkout.py::test_declined"],
+      "killing_test_ids": ["tests/test_checkout.py::test_declined"],
+      "duration_ms": 1,
+      "stdout_hash": null,
+      "stderr_hash": null
+    }
+  ]
+}

@@ -39,6 +39,10 @@ class TestEngineeringRequest:
     max_repairs: int = 0
     test_roots: tuple[str, ...] = ("tests",)
     framework: str = "pytest"
+    acceptance_criterion_ids: tuple[str, ...] = ()
+    risk_ids: tuple[str, ...] = ()
+    observable_behavior: str | None = None
+    business_oracle: str | None = None
 
 
 class TestEngineeringService:
@@ -55,14 +59,25 @@ class TestEngineeringService:
                 evidence_ids=request.requirement_evidence_ids,
                 budget=budget,
             )
-        intent = TestIntent("TI-" + request.requirement_id, request.requirement_id, request.requirement_id, request.requirement_evidence_ids)
+        intent = TestIntent(
+            "TI-" + request.requirement_id,
+            request.requirement_id,
+            request.observable_behavior or request.requirement_id,
+            request.requirement_evidence_ids,
+            request.acceptance_criterion_ids,
+            request.risk_ids,
+            request.observable_behavior,
+            request.business_oracle,
+        )
         scenario = TestScenario(
             "TS-" + request.requirement_id,
             intent.id,
             "generated candidate",
             ("execute candidate",),
-            "test passes",
+            request.business_oracle or "test passes",
             request.requirement_evidence_ids,
+            request.business_oracle,
+            request.acceptance_criterion_ids,
         )
         plan = TestPlan("TP-" + request.requirement_id, intent.id, request.framework, (scenario,), request.requirement_evidence_ids)
         backend = self.backend or _default_backend(request.framework)
