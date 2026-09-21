@@ -130,3 +130,54 @@ def test_unverified_mutation_evidence_does_not_create_verified_mapping(tmp_path,
     assert assessment.survivor_links
     assert all(link.mapping_status == "unverified" for link in assessment.survivor_links)
     assert assessment.termination_reason == "INSUFFICIENT_EVIDENCE"
+
+
+def test_permission_evidence_preserves_structured_permission_metadata() -> None:
+    from qa_agent.effectiveness_service import _agent_evidence
+    from qa_agent.runtime import PermissionResult
+
+    permission = PermissionResult("READ", True, "read-only context access allowed", "EV-PERM-1", False)
+    evidence = _agent_evidence(permission.evidence_id or "EV-PERM-1", "permission:READ", permission.reason, 1, permission=permission)
+
+    assert evidence.type == "permission"
+    assert evidence.metadata["permission"] == {
+        "action": "READ",
+        "allowed": True,
+        "reason": "read-only context access allowed",
+        "external_command_executed": False,
+    }
+
+
+def test_timeout_after_model_mapping_terminates_assessment(tmp_path, valid_context, valid_report, monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    import qa_agent.effectiveness_service as effectiveness_service
+    from qa_agent.effectiveness_service import TestEffectivenessRequest, TestEffectivenessService
+    from qa_agent.model_runtime import ModelResponse
+    from qa_agent.runtime import ExecutionBudget
+
+    class Clock:
+        value = 0
+
+        def monotonic(self):
+            return self.value
+
+    clock = Clock()
+    monkeypatch.setattr(effectiveness_service, "time", SimpleNamespace(monotonic=clock.monotonic))
+
+    class SlowMapper:
+        def map(self, context, survivor_ids):
+            clock.value = 2
+            return ModelResponse("test", "slow", structured_output={"links": []})
+
+    duplicate_scenario = replace(valid_context.scenarios[0], id="TS-2")
+    context = replace(valid_context, scenarios=valid_context.scenarios + (duplicate_scenario,))
+    monkeypatch.setattr(effectiveness_service, "resolve_repository_revision", lambda _: "REV-1")
+    budget = ExecutionBudget.v04_defaults()
+    budget.timeout_seconds = 1
+    assessment = TestEffectivenessService(model_mapper=SlowMapper()).assess(
+        TestEffectivenessRequest("REQ-1", tmp_path, context, valid_report, None, 0.8, budget)
+    )
+
+    assert assessment.decision == "incomplete"
+    assert assessment.termination_reason == "TIMEOUT"

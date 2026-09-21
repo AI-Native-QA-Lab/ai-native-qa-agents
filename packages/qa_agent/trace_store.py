@@ -295,7 +295,7 @@ class SQLiteTraceStore:
     def context_id_for(self, context: TestEffectivenessContext) -> str:
         return "CTX-" + context.artifact_hash.split(":", 1)[1][:16]
 
-    def save_test_context(self, context: TestEffectivenessContext) -> None:
+    def save_test_context(self, context: TestEffectivenessContext, repository_revision: str = "") -> None:
         context_id = self.context_id_for(context)
         payload = context.to_dict()
         self.save_evidence(context.evidence)
@@ -306,7 +306,7 @@ class SQLiteTraceStore:
                     context_id,
                     context.requirement_id,
                     context.schema_version,
-                    "",
+                    repository_revision,
                     context.artifact_hash,
                     _json(payload),
                     _json(context.evidence_ids),
@@ -329,7 +329,7 @@ class SQLiteTraceStore:
                     run.run_id,
                     run.assessment_id,
                     run.backend,
-                    None,
+                    run.tool_version,
                     run.repository_revision,
                     run.process_status,
                     run.observation_status,
@@ -337,7 +337,7 @@ class SQLiteTraceStore:
                     _json(run.selected_test_ids),
                     _json(run.selected_test_paths),
                     _json(run.mutant_ids),
-                    None,
+                    run.report_hash,
                     _json(run.evidence_ids),
                 ),
             )
@@ -443,7 +443,7 @@ class SQLiteTraceStore:
 
     def _get_mutation_run(self, run_id: str) -> MutationRun | None:
         with self._connect() as connection:
-            row = connection.execute("SELECT run_id, assessment_id, backend, repository_revision, process_status, observation_status, target_paths_json, selected_test_paths_json, selected_test_ids_json, mutant_ids_json, evidence_ids_json FROM mutation_runs WHERE run_id = ?", (run_id,)).fetchone()
+            row = connection.execute("SELECT run_id, assessment_id, backend, tool_version, repository_revision, process_status, observation_status, target_paths_json, selected_test_paths_json, selected_test_ids_json, mutant_ids_json, report_hash, evidence_ids_json FROM mutation_runs WHERE run_id = ?", (run_id,)).fetchone()
         if not row:
             return None
-        return MutationRun(row[0], row[1], row[2], row[3], tuple(json.loads(row[6])), tuple(json.loads(row[7])), tuple(json.loads(row[8])), row[4], row[5], tuple(json.loads(row[9])), tuple(json.loads(row[10])))
+        return MutationRun(row[0], row[1], row[2], row[4], tuple(json.loads(row[7])), tuple(json.loads(row[8])), tuple(json.loads(row[9])), row[5], row[6], tuple(json.loads(row[10])), tuple(json.loads(row[12])), row[3], row[11])

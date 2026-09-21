@@ -351,6 +351,8 @@ class MutationRun:
     observation_status: str
     mutant_ids: tuple[str, ...]
     evidence_ids: tuple[str, ...]
+    tool_version: str | None = None
+    report_hash: str | None = None
 
     def __post_init__(self) -> None:
         for value, name in ((self.run_id, "run id"), (self.assessment_id, "assessment id"), (self.backend, "backend"), (self.repository_revision, "repository revision")):
@@ -364,6 +366,8 @@ class MutationRun:
         _unique(self.selected_test_ids, "selected test ids", required=True)
         _unique(self.mutant_ids, "mutant ids")
         _unique(self.evidence_ids, "run evidence", required=True)
+        if self.report_hash is not None:
+            _hash(self.report_hash, "mutation report hash")
 
 
 @dataclass(frozen=True)

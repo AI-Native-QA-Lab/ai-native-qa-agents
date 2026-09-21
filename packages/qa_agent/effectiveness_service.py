@@ -147,11 +147,31 @@ def resolve_repository_revision(repository: Path) -> str:
     return "tree:" + digest.hexdigest()
 
 
-def _agent_evidence(evidence_id: str, subject: str, message: str, iteration: int) -> Evidence:
+def _agent_evidence(
+    evidence_id: str,
+    subject: str,
+    message: str,
+    iteration: int,
+    *,
+    permission: PermissionResult | None = None,
+) -> Evidence:
     content_hash = "sha256:" + hashlib.sha256(message.encode("utf-8")).hexdigest()
+    metadata: dict[str, Any] = {
+        "redaction": {"applied": False, "policy": "bounded-redacted-v1", "max_bytes": 4096},
+        "limits": {"context_bytes": 1_000_000, "report_bytes": 2_000_000},
+    }
+    evidence_type = "backend_capability" if subject.startswith("backend") else "test_context"
+    if permission is not None:
+        evidence_type = "permission"
+        metadata["permission"] = {
+            "action": permission.action,
+            "allowed": permission.allowed,
+            "reason": permission.reason,
+            "external_command_executed": permission.external_command_executed,
+        }
     return Evidence(
         evidence_id,
-        "backend_capability" if subject.startswith("backend") else "test_context",
+        evidence_type,
         subject,
         1,
         1,
@@ -160,10 +180,7 @@ def _agent_evidence(evidence_id: str, subject: str, message: str, iteration: int
         extractor="v0.4-service",
         subject=subject,
         source_ref=subject + "#L1",
-        metadata={
-            "redaction": {"applied": False, "policy": "bounded-redacted-v1", "max_bytes": 4096},
-            "limits": {"context_bytes": 1_000_000, "report_bytes": 2_000_000},
-        },
+        metadata=metadata,
         loop_iteration=iteration,
     )
 
@@ -254,19 +271,37 @@ class TestEffectivenessService:
             )
 
         read_permission = PermissionResult("READ", True, "read-only context access allowed", f"EV-PERM-{assessment_id}-READ", False)
-        agent_evidence.append(_agent_evidence(read_permission.evidence_id or "EV-PERM-READ", "permission:READ", read_permission.reason, 1))
+        agent_evidence.append(
+            _agent_evidence(
+                read_permission.evidence_id or "EV-PERM-READ",
+                "permission:READ",
+                read_permission.reason,
+                1,
+                permission=read_permission,
+            )
+        )
         if not consume_tool() or not record_phase("SELECT", permission_id=read_permission.evidence_id, evidence_ids=(read_permission.evidence_id or "",)):
             return self._finish(request, assessment_id, context_valid, None, score_results((), ()), (), (), traces, agent_evidence, provider_evidence, "BUDGET_EXHAUSTED")
         if timed_out():
             return self._finish(request, assessment_id, context_valid, None, score_results((), ()), (), (), traces, agent_evidence, provider_evidence, "TIMEOUT")
 
         execute_permission = PermissionResult("EXECUTE_MUTATION", True, "controlled mutation observation allowed", f"EV-PERM-{assessment_id}-EXECUTE", False)
-        agent_evidence.append(_agent_evidence(execute_permission.evidence_id or "EV-PERM-EXECUTE", "permission:EXECUTE_MUTATION", execute_permission.reason, 2))
+        agent_evidence.append(
+            _agent_evidence(
+                execute_permission.evidence_id or "EV-PERM-EXECUTE",
+                "permission:EXECUTE_MUTATION",
+                execute_permission.reason,
+                2,
+                permission=execute_permission,
+            )
+        )
         if not consume_tool() or not record_phase("MUTATE", permission_id=execute_permission.evidence_id, evidence_ids=(execute_permission.evidence_id or "",)):
             return self._finish(request, assessment_id, context_valid, None, score_results((), ()), (), (), traces, agent_evidence, provider_evidence, "BUDGET_EXHAUSTED")
 
         try:
             repository_revision = resolve_repository_revision(request.repository)
+            if timed_out():
+                return self._finish(request, assessment_id, context_valid, None, score_results((), ()), (), (), traces, agent_evidence, provider_evidence, "TIMEOUT")
             if request.mutation_report is not None:
                 if not consume_tool():
                     return self._finish(request, assessment_id, context_valid, None, score_results((), ()), (), (), traces, agent_evidence, provider_evidence, "BUDGET_EXHAUSTED")
@@ -291,6 +326,9 @@ class TestEffectivenessService:
                         permission_context,
                     )
                 )
+            if timed_out():
+                provider_evidence = tuple(provider_result.evidence)
+                return self._finish(request, assessment_id, context_valid, None, score_results((), tuple(item.id for item in provider_evidence)), (), (), traces, agent_evidence, provider_evidence, "TIMEOUT")
         except (MutationInputError, MutationUnavailableError, MutationUnsupportedError, MutationConfigurationError, MutationExecutionError, OSError, ValueError):
             traces[-1] = replace(traces[-1], status="terminated", termination_reason="INSUFFICIENT_EVIDENCE")
             return self._finish(request, assessment_id, context_valid, None, score_results((), ()), (), (), traces, agent_evidence, provider_evidence, "INSUFFICIENT_EVIDENCE")
@@ -321,11 +359,29 @@ class TestEffectivenessService:
             provider_result.observation_status,
             tuple(item.mutant_id for item in provider_result.mutants),
             tuple(item.id for item in provider_evidence),
+            provider_result.tool_version,
+            provider_result.raw_report_hash,
         )
         result_values = tuple(replace(item, run_id=run_id) for item in provider_result.results)
         if not record_phase("MAP", evidence_ids=tuple(item.id for item in provider_evidence)):
             return self._finish(request, assessment_id, context_valid, run, score_results(result_values, tuple(item.id for item in provider_evidence)), (), (), traces, agent_evidence, provider_evidence, "BUDGET_EXHAUSTED")
         survivor_links = self._map_survivors(request.context, run, result_values, provider_evidence)
+        if timed_out():
+            return self._finish(
+                request,
+                assessment_id,
+                context_valid,
+                run,
+                score_results(result_values, tuple(item.id for item in provider_evidence)),
+                survivor_links,
+                (),
+                traces,
+                agent_evidence,
+                provider_evidence,
+                "TIMEOUT",
+                mutants=tuple(provider_result.mutants),
+                results=result_values,
+            )
         survivor_links, model_calls = self._apply_optional_model_mapping(
             request,
             assessment_id,
@@ -336,6 +392,22 @@ class TestEffectivenessService:
             traces,
             model_calls,
         )
+        if timed_out():
+            return self._finish(
+                request,
+                assessment_id,
+                context_valid,
+                run,
+                score_results(result_values, tuple(item.id for item in provider_evidence)),
+                survivor_links,
+                (),
+                traces,
+                agent_evidence,
+                provider_evidence,
+                "TIMEOUT",
+                mutants=tuple(provider_result.mutants),
+                results=result_values,
+            )
         signals = self._signals(request.context, survivor_links)
         if not record_phase("EVALUATE", evidence_ids=tuple(item.id for item in provider_evidence)):
             return self._finish(request, assessment_id, context_valid, run, score_results(result_values, tuple(item.id for item in provider_evidence)), survivor_links, signals, traces, agent_evidence, provider_evidence, "BUDGET_EXHAUSTED")
@@ -423,7 +495,13 @@ class TestEffectivenessService:
         assessment = TestEffectivenessAssessment(assessment_id, request.requirement_id, run, score, links, signals, gate.decision, termination_reason, gate, evidence_ids, tuple(traces), request.budget)
         if self.store is not None:
             if context is not None:
-                self.store.save_test_context(context)
+                repository_revision = run.repository_revision if run is not None else ""
+                if not repository_revision:
+                    try:
+                        repository_revision = resolve_repository_revision(request.repository)
+                    except (OSError, ValueError):
+                        repository_revision = ""
+                self.store.save_test_context(context, repository_revision)
             if agent_evidence:
                 self.store.save_evidence(agent_evidence)
             if provider_evidence:
@@ -513,6 +591,7 @@ class TestEffectivenessService:
                     "permission:MODEL_SURVIVOR_MAPPING",
                     permission.reason,
                     len(traces),
+                    permission=permission,
                 )
             )
             response = self.model_mapper.map(bounded_context, survivor_ids)

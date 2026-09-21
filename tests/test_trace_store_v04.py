@@ -48,11 +48,13 @@ def test_v04_context_and_mutation_records_round_trip(tmp_path) -> None:
     fixture = Path(__file__).parent / "fixtures" / "v04" / "context-valid.json"
     context = TestEffectivenessContext.from_dict(json.loads(fixture.read_text(encoding="utf-8")), 1_000_000)
     store = SQLiteTraceStore(tmp_path / "trace.db")
-    store.save_test_context(context)
+    store.save_test_context(context, "REV-1")
     context_id = store.context_id_for(context)
     assert store.get_test_context(context_id) == context
+    with store._connect() as connection:
+        assert connection.execute("select repository_revision from test_contexts where context_id = ?", (context_id,)).fetchone()[0] == "REV-1"
 
-    run = MutationRun("RUN-1", "ASSESS-1", "offline", "REV-1", ("src/checkout.py",), ("tests/test_checkout.py",), ("tests/test_checkout.py::test_declined",), "completed", "complete", ("M-1",), ("EV-RUN-1",))
+    run = MutationRun("RUN-1", "ASSESS-1", "offline", "REV-1", ("src/checkout.py",), ("tests/test_checkout.py",), ("tests/test_checkout.py::test_declined",), "completed", "complete", ("M-1",), ("EV-RUN-1",), "offline-1", "sha256:" + "a" * 64)
     mutant = Mutant("M-1", "src/checkout.py", 3, "replace-constant", "False", "True", "active", ("EV-M-1",))
     result = MutationResult("RUN-1", "M-1", "killed", ("tests/test_checkout.py::test_declined",), ("tests/test_checkout.py::test_declined",), 1, None, None, ("EV-RESULT-1",))
     link = MutationTraceLink("RUN-1", "M-1", "REQ-1", "TI-1", "TS-1", "The error state is asserted", "verified", ("EV-LINK-1",))
@@ -60,6 +62,12 @@ def test_v04_context_and_mutation_records_round_trip(tmp_path) -> None:
     with store._connect() as connection:
         assert connection.execute("select count(*) from mutation_results where run_id = 'RUN-1'").fetchone()[0] == 1
         assert connection.execute("select count(*) from mutation_trace_links where run_id = 'RUN-1'").fetchone()[0] == 1
+        row = connection.execute("select tool_version, report_hash from mutation_runs where run_id = 'RUN-1'").fetchone()
+    assert row == ("offline-1", "sha256:" + "a" * 64)
+    loaded = store._get_mutation_run("RUN-1")
+    assert loaded is not None
+    assert loaded.tool_version == "offline-1"
+    assert loaded.report_hash == "sha256:" + "a" * 64
 
 
 def test_v04_rejects_newer_schema_without_overwriting(tmp_path) -> None:

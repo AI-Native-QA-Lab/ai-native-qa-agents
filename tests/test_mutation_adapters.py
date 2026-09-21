@@ -118,3 +118,81 @@ def test_capability_adapters_do_not_download_or_execute_when_unavailable(monkeyp
         PitMutationBackend().run(None)
     with pytest.raises(MutationUnsupportedError):
         StrykerMutationBackend().run(None)
+
+
+def test_available_mutmut_capability_is_serializable_and_explains_limits(monkeypatch, tmp_path) -> None:
+    import qa_agent.mutation_adapters as mutation_adapters
+
+    monkeypatch.setattr(mutation_adapters.shutil, "which", lambda name: "/usr/local/bin/mutmut")
+    monkeypatch.setattr(mutation_adapters.importlib_metadata, "version", lambda name: "3.5.0")
+
+    capability = mutation_adapters.MutmutMutationBackend().detect(tmp_path)
+
+    assert capability.status == "available"
+    assert capability.tool_version == "3.5.0"
+    assert capability.limits["controlled_copy"] is True
+    assert capability.evidence
+    assert capability.evidence[0].type == "backend_capability"
+    assert capability.evidence[0].to_dict()["metadata"]["capability"]["reason"] is None
+
+
+def test_mutmut_backend_normalizes_completed_run_without_precreated_copy(monkeypatch, tmp_path) -> None:
+    from types import SimpleNamespace
+
+    import qa_agent.mutation_adapters as mutation_adapters
+    from qa_agent.mutation_adapters import MutmutMutationBackend
+    from qa_agent.mutation_backends import MutationRequest
+    from qa_agent.runtime import PermissionContext
+
+    repository = tmp_path / "repository"
+    (repository / "src").mkdir(parents=True)
+    (repository / "src" / "cart.py").write_text("def checkout():\n    return False\n", encoding="utf-8")
+    selected_test = "tests/test_cart.py::test_declined"
+
+    monkeypatch.setattr(mutation_adapters.shutil, "which", lambda name: "/usr/local/bin/mutmut")
+
+    def fake_run(argv, cwd, **kwargs):
+        if argv[1] == "run":
+            meta_path = Path(cwd) / "mutants" / "src" / "cart.py.meta"
+            meta_path.parent.mkdir(parents=True)
+            meta_path.write_text(
+                json.dumps(
+                    {
+                        "exit_code_by_key": {
+                            "cart.checkout__mutmut_1": 1,
+                            "cart.checkout__mutmut_2": 0,
+                        },
+                        "hash_by_function_name": {"checkout": "hash"},
+                        "type_check_error_by_key": {},
+                        "durations_by_key": {
+                            "cart.checkout__mutmut_1": 0.01,
+                            "cart.checkout__mutmut_2": 0.02,
+                        },
+                        "estimated_durations_by_key": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            return SimpleNamespace(returncode=0, stdout="mutmut completed\n", stderr="")
+        assert argv[1] == "tests-for-mutant"
+        return SimpleNamespace(returncode=0, stdout=selected_test + "\n", stderr="")
+
+    monkeypatch.setattr(mutation_adapters.subprocess, "run", fake_run)
+    request = MutationRequest(
+        repository,
+        "REV-1",
+        ("src/cart.py",),
+        (selected_test,),
+        ("tests/test_cart.py",),
+        5,
+        10,
+        PermissionContext(repository, None, ("READ", "EXECUTE_MUTATION"), (), 32, 100_000),
+    )
+
+    result = MutmutMutationBackend().run(request)
+
+    assert result.process_status == "completed"
+    assert result.observation_status == "complete"
+    assert {item.outcome for item in result.results} == {"killed", "survived"}
+    assert result.raw_report_hash and result.raw_report_hash.startswith("sha256:")
+    assert {item.path for item in result.mutants} == {"src/cart.py"}

@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+from importlib import metadata as importlib_metadata
 import json
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -76,6 +78,53 @@ def _evidence(
 
 def _stable_evidence_id(prefix: str, value: str) -> str:
     return f"{prefix}-{hashlib.sha256(value.encode('utf-8')).hexdigest()[:16]}"
+
+
+def _capability(
+    backend: str,
+    repository: Path,
+    status: str,
+    tool_version: str | None,
+    languages: tuple[str, ...],
+    frameworks: tuple[str, ...],
+    reason: str | None,
+    limits: dict[str, Any],
+) -> BackendCapability:
+    payload = {
+        "backend": backend,
+        "status": status,
+        "tool_version": tool_version,
+        "languages": list(languages),
+        "frameworks": list(frameworks),
+        "reason": reason,
+        "limits": limits,
+    }
+    content_hash = "sha256:" + hashlib.sha256(canonical_json_bytes(payload)).hexdigest()
+    evidence = Evidence(
+        _stable_evidence_id("EV-CAPABILITY", backend + ":" + str(repository)),
+        "backend_capability",
+        str(repository),
+        1,
+        1,
+        content_hash,
+        provider="agent-runtime",
+        extractor="mutation-capability-v1",
+        subject="backend:" + backend,
+        source_ref=str(repository) + "#capability",
+        metadata={
+            **_metadata(ExecutionBudget.v04_defaults()),
+            "capability": {
+                "backend": backend,
+                "status": status,
+                "tool_version": tool_version,
+                "languages": list(languages),
+                "frameworks": list(frameworks),
+                "reason": reason,
+                "limits": limits,
+            },
+        },
+    )
+    return BackendCapability(backend, status, tool_version, languages, frameworks, reason, limits, (evidence,))
 
 
 def _string(value: Any, name: str) -> str:
@@ -227,36 +276,238 @@ class OfflineMutationReportAdapter:
 
 
 class MutmutMutationBackend:
+    _STATUS_BY_EXIT_CODE = {
+        0: "survived",
+        1: "killed",
+        2: "interrupted",
+        3: "killed",
+        5: "no tests",
+        24: "timeout",
+        33: "no tests",
+        34: "skipped",
+        35: "suspicious",
+        36: "timeout",
+        37: "caught by type check",
+        152: "timeout",
+        255: "timeout",
+        -9: "segfault",
+        -11: "segfault",
+        -24: "timeout",
+    }
+
     def detect(self, repository: Path) -> BackendCapability:
         executable = shutil.which("mutmut")
         if executable is None:
-            return BackendCapability("mutmut", "unavailable", None, ("Python",), ("pytest",), "mutmut executable is unavailable", {}, ())
-        return BackendCapability("mutmut", "available", None, ("Python",), ("pytest",), None, {"executable": "mutmut"}, ())
+            return _capability("mutmut", repository, "unavailable", None, ("Python",), ("pytest",), "mutmut executable is unavailable", {})
+        try:
+            tool_version = importlib_metadata.version("mutmut")
+        except importlib_metadata.PackageNotFoundError:
+            tool_version = None
+        return _capability(
+            "mutmut",
+            repository,
+            "available",
+            tool_version,
+            ("Python",),
+            ("pytest",),
+            None,
+            {"executable": executable, "controlled_copy": True, "report_format": "mutants/*.meta"},
+        )
+
+    def _line_for_mutant(self, controlled: Path, source_path: str, mutant_id: str) -> int:
+        spans_path = controlled / "mutants" / (source_path + ".spans")
+        try:
+            payload = json.loads(spans_path.read_text(encoding="utf-8"))
+            function_name = mutant_id.rsplit(".", 1)[-1].split("__mutmut_", 1)[0]
+            span = payload.get("spans", {}).get(function_name)
+            if isinstance(span, list) and span and type(span[0]) is int and span[0] > 0:
+                return span[0]
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+            pass
+        return 1
+
+    def _tests_for_mutant(
+        self,
+        executable: str,
+        controlled: Path,
+        mutant_id: str,
+        selected_test_ids: tuple[str, ...],
+        deadline: float,
+    ) -> tuple[str, ...] | None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise MutationExecutionError("mutmut report collection timed out")
+        try:
+            completed = subprocess.run(
+                [executable, "tests-for-mutant", mutant_id],
+                cwd=controlled,
+                capture_output=True,
+                text=True,
+                shell=False,
+                timeout=remaining,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise MutationExecutionError("mutmut report collection timed out") from exc
+        if completed.returncode != 0:
+            return None
+        selected = set(selected_test_ids)
+        observed = tuple(dict.fromkeys(line.strip() for line in completed.stdout.splitlines() if line.strip() and line.strip() in selected))
+        return observed
 
     def run(self, request: MutationRequest) -> MutationBackendResult:
         capability = self.detect(request.repository if request is not None else Path("."))
         if capability.status == "unavailable":
             raise MutationUnavailableError(capability.reason or "mutmut is unavailable")
-        if request is None or request.permission_context.controlled_copy is None:
-            raise MutationConfigurationError("mutmut requires a controlled copy")
+        if request is None:
+            raise MutationConfigurationError("mutmut requires a mutation request")
         if "EXECUTE_MUTATION" not in request.permission_context.allowed_actions:
             raise MutationConfigurationError("mutation execution permission is not granted")
+        executable = str(capability.limits.get("executable", "mutmut"))
+        deadline = time.monotonic() + request.timeout_seconds
         with tempfile.TemporaryDirectory(prefix="qa-agent-mutmut-") as directory:
             controlled = Path(directory) / "repository"
             shutil.copytree(request.repository, controlled)
-            argv = ["mutmut", "run", "--paths-to-mutate", ",".join(request.target_paths)]
+            argv = [executable, "run", "--paths-to-mutate", ",".join(request.target_paths)]
             try:
-                completed = subprocess.run(argv, cwd=controlled, capture_output=True, text=True, shell=False, timeout=request.timeout_seconds, check=False)
+                completed = subprocess.run(
+                    argv,
+                    cwd=controlled,
+                    capture_output=True,
+                    text=True,
+                    shell=False,
+                    timeout=max(0.001, deadline - time.monotonic()),
+                    check=False,
+                )
             except subprocess.TimeoutExpired as exc:
                 raise MutationExecutionError("mutmut execution timed out") from exc
-            if completed.returncode != 0:
-                raise MutationExecutionError("mutmut execution failed")
-        raise MutationExecutionError("mutmut report normalization is unavailable in this slice")
+            report_root = controlled / "mutants"
+            meta_records: list[tuple[str, bytes, dict[str, Any]]] = []
+            if report_root.is_dir():
+                for meta_path in sorted(report_root.rglob("*.meta")):
+                    relative = meta_path.relative_to(report_root).as_posix()
+                    source_path = relative.removesuffix(".meta")
+                    if source_path not in request.target_paths:
+                        continue
+                    try:
+                        raw = meta_path.read_bytes()
+                        if len(raw) > request.permission_context.max_file_bytes:
+                            raise MutationExecutionError("mutmut metadata exceeds max_file_bytes")
+                        payload = json.loads(raw.decode("utf-8"))
+                    except MutationExecutionError:
+                        raise
+                    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                        raise MutationExecutionError(f"invalid mutmut metadata for {source_path}") from exc
+                    if not isinstance(payload, dict) or not isinstance(payload.get("exit_code_by_key"), dict):
+                        raise MutationExecutionError(f"mutmut metadata is missing exit_code_by_key for {source_path}")
+                    meta_records.append((source_path, raw, payload))
+            if not meta_records:
+                if completed.returncode != 0:
+                    raise MutationExecutionError("mutmut execution failed without a normalized report")
+                raise MutationExecutionError("mutmut did not produce a normalized report")
+
+            raw_report = bytearray()
+            raw_report.extend(completed.stdout.encode("utf-8"))
+            raw_report.extend(b"\0")
+            raw_report.extend(completed.stderr.encode("utf-8"))
+            for source_path, raw, _ in meta_records:
+                raw_report.extend(source_path.encode("utf-8"))
+                raw_report.extend(b"\0")
+                raw_report.extend(raw)
+            raw_report_hash = "sha256:" + hashlib.sha256(bytes(raw_report)).hexdigest()
+            report_evidence_id = _stable_evidence_id("EV-REPORT", raw_report_hash)
+            evidence: list[Evidence] = [
+                _evidence(
+                    report_evidence_id,
+                    "mutation_report",
+                    "mutmut",
+                    "mutants",
+                    1,
+                    raw_report_hash,
+                    "mutmut",
+                    ExecutionBudget(max_report_bytes=request.permission_context.max_file_bytes),
+                )
+            ]
+            mutants: list[Mutant] = []
+            results: list[MutationResult] = []
+            observed_complete = completed.returncode == 0
+            seen_ids: set[str] = set()
+            for source_path, raw, payload in meta_records:
+                exit_codes = payload["exit_code_by_key"]
+                durations = payload.get("durations_by_key", {})
+                if not isinstance(durations, dict):
+                    durations = {}
+                meta_hash = "sha256:" + hashlib.sha256(raw).hexdigest()
+                for mutant_id, exit_code in exit_codes.items():
+                    if not isinstance(mutant_id, str) or not mutant_id or mutant_id in seen_ids:
+                        raise MutationExecutionError("mutmut report contains an invalid or duplicate mutant id")
+                    seen_ids.add(mutant_id)
+                    status = self._STATUS_BY_EXIT_CODE.get(exit_code, "suspicious")
+                    if exit_code is None:
+                        observed_complete = False
+                    tests: tuple[str, ...] = ()
+                    if status in {"killed", "survived", "timeout", "suspicious", "segfault", "interrupted"}:
+                        tests = self._tests_for_mutant(executable, controlled, mutant_id, request.selected_test_ids, deadline) or ()
+                        if not tests and status in {"killed", "survived"}:
+                            observed_complete = False
+                    if status == "killed" and tests:
+                        outcome = "killed"
+                        killing = tests
+                    elif status == "survived" and tests:
+                        outcome = "survived"
+                        killing = ()
+                    elif status == "timeout":
+                        outcome = "timeout"
+                        killing = ()
+                    elif status in {"no tests", "skipped", "not checked", "caught by type check"}:
+                        outcome = "not_run"
+                        tests = ()
+                        killing = ()
+                        observed_complete = False
+                    else:
+                        outcome = "error"
+                        killing = ()
+                        observed_complete = False
+                    line = self._line_for_mutant(controlled, source_path, mutant_id)
+                    mutant_hash = "sha256:" + hashlib.sha256((source_path + "\0" + mutant_id + "\0" + meta_hash).encode("utf-8")).hexdigest()
+                    mutant_evidence_id = _stable_evidence_id("EV-MUTANT", mutant_id)
+                    result_evidence_id = _stable_evidence_id("EV-RESULT", mutant_id)
+                    evidence.append(_evidence(mutant_evidence_id, "mutant_observation", mutant_id, source_path, line, mutant_hash, "mutmut", ExecutionBudget(max_report_bytes=request.permission_context.max_file_bytes)))
+                    evidence.append(_evidence(result_evidence_id, "mutation_run", mutant_id, source_path, line, mutant_hash, "mutmut", ExecutionBudget(max_report_bytes=request.permission_context.max_file_bytes)))
+                    mutants.append(Mutant(mutant_id, source_path, line, "mutmut", "<unavailable>", "<unavailable>", "not_run" if outcome == "not_run" else "active", (mutant_evidence_id,)))
+                    raw_duration = durations.get(mutant_id, 0)
+                    duration_ms = int(round(raw_duration * 1000)) if isinstance(raw_duration, (int, float)) and raw_duration >= 0 else 0
+                    results.append(MutationResult("PROVIDER-RUN", mutant_id, outcome, tests, killing, duration_ms, None, None, (result_evidence_id,)))
+            if len(mutants) > request.max_mutants:
+                raise MutationExecutionError("mutmut report exceeds max_mutants")
+            if not mutants:
+                raise MutationExecutionError("mutmut report contains no mutants")
+            if observed_complete and all(item.outcome in {"killed", "survived"} for item in results):
+                process_status = "completed"
+                observation_status = "complete"
+            elif any(item.outcome in {"killed", "survived", "timeout"} for item in results):
+                process_status = "partial" if completed.returncode == 0 else "error"
+                observation_status = "partial"
+            else:
+                process_status = "error" if completed.returncode != 0 else "not_run"
+                observation_status = "partial"
+            return MutationBackendResult(
+                "mutmut",
+                capability.tool_version,
+                process_status,
+                observation_status,
+                tuple(mutants),
+                tuple(results),
+                tuple(evidence),
+                raw_report_hash,
+                request.target_paths,
+                request.selected_test_ids,
+            )
 
 
 class PitMutationBackend:
     def detect(self, repository: Path) -> BackendCapability:
-        return BackendCapability("pit", "unsupported", None, ("Java",), ("JUnit",), "PIT execution is deferred to a reproducible adapter slice", {}, ())
+        return _capability("pit", repository, "unsupported", None, ("Java",), ("JUnit",), "PIT execution is deferred to a reproducible adapter slice", {})
 
     def run(self, request: MutationRequest) -> MutationBackendResult:
         raise MutationUnsupportedError("PIT execution is unsupported in this slice")
@@ -264,7 +515,7 @@ class PitMutationBackend:
 
 class StrykerMutationBackend:
     def detect(self, repository: Path) -> BackendCapability:
-        return BackendCapability("stryker", "unsupported", None, ("TypeScript", "JavaScript"), ("Playwright",), "Stryker execution is deferred to a reproducible adapter slice", {}, ())
+        return _capability("stryker", repository, "unsupported", None, ("TypeScript", "JavaScript"), ("Playwright",), "Stryker execution is deferred to a reproducible adapter slice", {})
 
     def run(self, request: MutationRequest) -> MutationBackendResult:
         raise MutationUnsupportedError("Stryker execution is unsupported in this slice")
