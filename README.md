@@ -61,7 +61,7 @@ Read the full [roadmap](ROADMAP_AND_VERSION_DESIGN.md) and choose a release pack
 └── *_SPEC.md       # Cross-version runtime contracts
 ```
 
-Current package version is **0.3.1**. Executable baselines cover v0.1 review, v0.2 requirement intelligence, and v0.3 test engineering. Later packs remain design-first until implemented.
+Current package version is **0.4.0**. Executable baselines cover v0.1 review, v0.2 requirement intelligence, v0.3 test engineering, and v0.4 test effectiveness and mutation.
 
 ## Quick start
 
@@ -101,6 +101,22 @@ qa-agent eval --version v0.3
 
 Default execution copies the repository into a local temporary worktree, applies test-only patches, and runs pytest there without writing the original tree. Optional hardened isolation: `--execution-backend docker` (requires a local Docker image). Playwright remains detect-only when binaries are unavailable. Patches are never auto-applied or committed.
 
+### v0.4 test effectiveness and mutation
+
+```bash
+qa-agent assess-effectiveness \
+  --requirement ./examples/v04-sample/requirement.md \
+  --repository ./examples/v04-sample/repository \
+  --trace-db ./trace.db \
+  --test-context ./examples/v04-sample/test-context.json \
+  --mutation-report ./examples/v04-sample/mutation-report.json
+qa-agent eval --version v0.4
+```
+
+The v0.4 loop is bounded and evidence-driven. Mutation is an evidence provider;
+unassessed real-project, model, package, deployment, and indexing claims remain
+explicitly outside the release evidence.
+
 ## Key documents
 
 - [Project blueprint](PROJECT_BLUEPRINT.md)
@@ -113,7 +129,9 @@ Default execution copies the repository into a local temporary worktree, applies
 
 ## Status
 
-This repository includes executable baselines through v0.3.1. It is not yet a production release.
+This repository includes executable baselines through v0.4.0. It is a reference
+architecture; the v0.4.0 release does not claim production readiness for
+unassessed external systems.
 
 ## License
 
